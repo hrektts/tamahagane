@@ -1,0 +1,19 @@
+cargo-features = ["edition2021"]
+
+[package]
+name = "tamahagane"
+version = "0.1.0"
+authors = ["Katsutoshi Horie <mps299792458@gmail.com>"]
+edition = "2021"
+description = "An experimental multidimensional array library for Rust nightly."
+readme = "README.md"
+repository = "https://github.com/hrektts/tamahagane/"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+num-complex = { version = "0.4.0", default-features = false }
+num-traits = { version = "0.2.14", default-features = false }
+
+[features]
+default = ["std"]
+std = []
