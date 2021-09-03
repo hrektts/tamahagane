@@ -1,10 +1,9 @@
 #![feature(
-    const_evaluatable_checked,
-    const_generics,
     const_option,
     const_trait_impl,
     exact_size_is_empty,
-    generic_associated_types
+    generic_associated_types,
+    generic_const_exprs
 )]
 #![cfg_attr(not(feature = "std"), no_std)]
 
