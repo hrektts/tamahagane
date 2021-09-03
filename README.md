@@ -2,6 +2,8 @@
 
 An experimental multidimensional array library for Rust nightly.
 
+[API documentation](https://hrektts.github.io/tamahagane/tamahagane/)
+
 ## Development status
 
 `tamahagane` is in alpha stage. It is not ready for production purpose.

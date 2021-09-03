@@ -1,0 +1,48 @@
+name: CI
+on: [push, pull_request]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        rust: [nightly]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Rust
+      run: rustup update ${{ matrix.rust }} && rustup default ${{ matrix.rust }}
+    - name: Run tests
+      run: cargo test
+    - run: cargo test --no-default-features
+
+  rustfmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Rust
+      run: rustup update nightly && rustup default nightly && rustup component add rustfmt
+    - name: Run rustfmt
+      run: cargo fmt -- --check
+
+  publish_docs:
+    name: Publish Documentation
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Install Rust
+      run: rustup update nightly && rustup default nightly
+    - name: Build documentation
+      run: cargo doc --no-deps --all-features
+    - name: Publish documentation
+      run: |
+        cd target/doc
+        git init
+        git add .
+        git -c user.name='ci' -c user.email='ci' commit -m init
+        git push -f -q https://git:${{ secrets.github_token }}@github.com/${{ github.repository }} HEAD:gh-pages
+      if: github.event_name == 'push' && github.event.ref == 'refs/heads/main'
