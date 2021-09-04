@@ -33,7 +33,7 @@ pub trait Shape:
         + PartialEq;
     fn array_len(&self) -> usize;
     fn n_dims(&self) -> usize;
-    fn to_strides<O>(&self) -> Self::Strides
+    fn to_default_strides<O>(&self) -> Self::Strides
     where
         O: Order;
 }
@@ -49,12 +49,12 @@ impl<const N: usize> Shape for [usize; N] {
         N
     }
 
-    fn to_strides<O>(&self) -> Self::Strides
+    fn to_default_strides<O>(&self) -> Self::Strides
     where
         O: Order,
     {
         let mut strides = [0; N];
-        O::convert_shape_to_strides(self, &mut strides);
+        O::convert_shape_to_default_strides(self, &mut strides);
         strides
     }
 }
@@ -70,14 +70,14 @@ impl Shape for Vec<usize> {
         self.len()
     }
 
-    fn to_strides<O>(&self) -> Self::Strides
+    fn to_default_strides<O>(&self) -> Self::Strides
     where
         O: Order,
     {
         let mut strides = Vec::<isize>::new();
         strides.reserve(self.len());
         strides.resize(self.len(), 0);
-        O::convert_shape_to_strides(self, &mut strides);
+        O::convert_shape_to_default_strides(self, &mut strides);
         strides
     }
 }
@@ -96,7 +96,7 @@ mod tests {
 
         assert_eq!(shape.array_len(), shape.iter().product());
         assert_eq!(shape.n_dims(), shape.len());
-        assert_eq!(shape.to_strides::<RowMajor>(), [12, 4, 1]);
+        assert_eq!(shape.to_default_strides::<RowMajor>(), [12, 4, 1]);
     }
 
     #[test]
@@ -105,6 +105,6 @@ mod tests {
 
         assert_eq!(shape.array_len(), shape.iter().product());
         assert_eq!(shape.n_dims(), shape.len());
-        assert_eq!(shape.to_strides::<RowMajor>(), [12, 4, 1]);
+        assert_eq!(shape.to_default_strides::<RowMajor>(), [12, 4, 1]);
     }
 }

@@ -189,7 +189,7 @@ where
     fn to_owned_array(&self) -> Array<T, <S as Storage<T>>::Owned<T>, D, O> {
         Array {
             shape: self.shape.clone(),
-            strides: self.shape.to_strides::<O>(),
+            strides: self.shape.to_default_strides::<O>(),
             storage: self.iter().cloned().collect(),
             offset: 0,
             phantom: PhantomData,
@@ -246,7 +246,7 @@ where
             })
         } else {
             Ok(Array {
-                strides: out_shape.to_strides::<O>(),
+                strides: out_shape.to_default_strides::<O>(),
                 shape: out_shape,
                 storage: self.iter().cloned().collect(),
                 offset: 0,
@@ -319,7 +319,7 @@ where
     fn allocate_uninitialized(shape: &<D as Dimensionality>::Shape) -> Self {
         Array {
             shape: shape.clone(),
-            strides: shape.to_strides::<O>(),
+            strides: shape.to_default_strides::<O>(),
             storage: S::allocate_uninitialized(shape.array_len()),
             offset: 0,
             phantom: PhantomData,
@@ -352,7 +352,7 @@ where
         {
             let out_shape = self.convert_shape(&shape);
             return Ok(Array {
-                strides: out_shape.to_strides::<NO>(),
+                strides: out_shape.to_default_strides::<NO>(),
                 shape: out_shape,
                 storage: self.storage,
                 offset: 0,
@@ -371,7 +371,7 @@ where
             })
         } else {
             Ok(Array {
-                strides: out_shape.to_strides::<O>(),
+                strides: out_shape.to_default_strides::<O>(),
                 shape: out_shape,
                 storage: self.iter().cloned().collect(),
                 offset: 0,
@@ -386,7 +386,7 @@ where
     {
         Array {
             shape: shape.clone(),
-            strides: shape.to_strides::<O>(),
+            strides: shape.to_default_strides::<O>(),
             storage: S::ones(shape.array_len()),
             offset: 0,
             phantom: PhantomData,
@@ -399,7 +399,7 @@ where
     {
         Array {
             shape: shape.clone(),
-            strides: shape.to_strides::<O>(),
+            strides: shape.to_default_strides::<O>(),
             storage: S::zeros(shape.array_len()),
             offset: 0,
             phantom: PhantomData,
@@ -579,7 +579,7 @@ where
         NO: Order,
         RS: Shape,
     {
-        let mut strides = shape.to_strides::<NO>();
+        let mut strides = shape.to_default_strides::<NO>();
         let array_len = self.len();
         if array_len > 0 {
             let (reduced_shape, reduced_strides, reduced_n_dims) = {
@@ -611,9 +611,9 @@ where
             {
                 None
             } else {
-                NO::compute_new_strides(
-                    &reduced_strides.as_ref()[..reduced_n_dims],
+                NO::convert_shape_to_strides(
                     shape,
+                    reduced_strides[reduced_n_dims - 1],
                     &mut strides,
                 );
                 Some(strides)
@@ -808,7 +808,7 @@ mod tests {
             let a2 = a1.to_shape(new_shape)?;
 
             assert_eq!(a2.shape, shape);
-            assert_eq!(a2.strides, shape.to_strides::<RowMajor>());
+            assert_eq!(a2.strides, shape.to_default_strides::<RowMajor>());
             assert_eq!(a2.storage.as_ptr(), a1.storage.as_ptr());
             assert_eq!(a2.offset, 0);
         }
@@ -818,7 +818,7 @@ mod tests {
             let a2 = a1.to_shape_with_order::<_, ColumnMajor>(new_shape)?;
 
             assert_eq!(a2.shape, shape);
-            assert_eq!(a2.strides, shape.to_strides::<ColumnMajor>());
+            assert_eq!(a2.strides, shape.to_default_strides::<ColumnMajor>());
             assert_eq!(a2.storage.as_ptr(), a1.storage.as_ptr());
             assert_eq!(a2.offset, 0);
         }
@@ -836,7 +836,7 @@ mod tests {
             let a2 = a1.into_shape(new_shape)?;
 
             assert_eq!(a2.shape, shape);
-            assert_eq!(a2.strides, shape.to_strides::<RowMajor>());
+            assert_eq!(a2.strides, shape.to_default_strides::<RowMajor>());
             assert_eq!(a2.storage.as_ptr(), ptr);
             assert_eq!(a2.offset, 0);
         }
@@ -848,7 +848,7 @@ mod tests {
             let a2 = a1.into_shape_with_order::<_, ColumnMajor>(new_shape)?;
 
             assert_eq!(a2.shape, shape);
-            assert_eq!(a2.strides, shape.to_strides::<ColumnMajor>());
+            assert_eq!(a2.strides, shape.to_default_strides::<ColumnMajor>());
             assert_eq!(a2.storage.as_ptr(), ptr);
             assert_eq!(a2.offset, 0);
         }
@@ -1093,7 +1093,7 @@ mod tests {
 
         assert_eq!(
             a3.strides(),
-            &shape.map(|x| x as usize).to_strides::<RowMajor>()
+            &shape.map(|x| x as usize).to_default_strides::<RowMajor>()
         );
 
         Ok(())

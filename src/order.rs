@@ -1,10 +1,7 @@
 use crate::{Dimensionality, Shape};
 
 pub trait Order: 'static {
-    fn compute_new_strides<S>(old_strides: &[isize], new_shape: &S, new_strides: &mut S::Strides)
-    where
-        S: Shape;
-    fn convert_shape_to_strides<S>(shape: &S, strides: &mut S::Strides)
+    fn convert_shape_to_strides<S>(shape: &S, base_stride: isize, strides: &mut S::Strides)
     where
         S: Shape;
     fn name<'a>() -> &'a str;
@@ -15,41 +12,30 @@ pub trait Order: 'static {
     where
         D: Dimensionality;
     fn is_data_aligned_monotonically(shape: &[usize], strides: &[isize]) -> bool;
+
+    fn convert_shape_to_default_strides<S>(shape: &S, strides: &mut S::Strides)
+    where
+        S: Shape,
+    {
+        Self::convert_shape_to_strides::<S>(shape, 1, strides)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct RowMajor;
 
 impl Order for RowMajor {
-    fn compute_new_strides<S>(old_strides: &[isize], new_shape: &S, new_strides: &mut S::Strides)
+    fn convert_shape_to_strides<S>(shape: &S, base_stride: isize, strides: &mut S::Strides)
     where
         S: Shape,
     {
-        debug_assert!(!old_strides.is_empty());
-        debug_assert!(new_shape.n_dims() > 0);
-        debug_assert_eq!(new_strides.as_ref().len(), new_shape.n_dims());
+        debug_assert_eq!(shape.n_dims(), strides.as_ref().len());
 
-        let mut last_stride = old_strides[old_strides.len() - 1];
-        for (stride, dim) in new_strides
-            .as_mut()
-            .iter_mut()
-            .rev()
-            .zip(new_shape.as_ref().iter().rev())
-        {
-            *stride = last_stride;
-            last_stride *= *dim as isize;
-        }
-    }
-
-    fn convert_shape_to_strides<S>(shape: &S, strides: &mut S::Strides)
-    where
-        S: Shape,
-    {
         strides
             .as_mut()
             .iter_mut()
             .zip(shape.as_ref().iter())
-            .rfold(1, |acc, (stride, &dim)| {
+            .rfold(base_stride, |acc, (stride, &dim)| {
                 *stride = acc;
                 acc * (dim as isize).max(1)
             });
@@ -114,33 +100,19 @@ impl Order for RowMajor {
 pub struct ColumnMajor;
 
 impl Order for ColumnMajor {
-    fn compute_new_strides<S>(old_strides: &[isize], new_shape: &S, new_strides: &mut S::Strides)
+    fn convert_shape_to_strides<S>(shape: &S, base_stride: isize, strides: &mut S::Strides)
     where
         S: Shape,
     {
-        debug_assert!(!old_strides.is_empty());
-        debug_assert!(new_shape.n_dims() > 0);
-        debug_assert_eq!(new_strides.as_ref().len(), new_shape.n_dims());
+        debug_assert_eq!(shape.n_dims(), strides.as_ref().len());
 
-        let mut last_stride = old_strides[0];
-        for (stride, dim) in new_strides.as_mut().iter_mut().zip(new_shape.as_ref()) {
-            *stride = last_stride;
-            last_stride *= *dim as isize;
-        }
-    }
-
-    fn convert_shape_to_strides<S>(shape: &S, strides: &mut S::Strides)
-    where
-        S: Shape,
-    {
-        strides
-            .as_mut()
-            .iter_mut()
-            .zip(shape.as_ref().iter())
-            .fold(1, |acc, (stride, &dim)| {
+        strides.as_mut().iter_mut().zip(shape.as_ref().iter()).fold(
+            base_stride,
+            |acc, (stride, &dim)| {
                 *stride = acc;
                 acc * (dim as isize).max(1)
-            });
+            },
+        );
     }
 
     fn name<'a>() -> &'a str {
@@ -198,7 +170,7 @@ mod tests {
     #[test]
     fn convert_shape_to_stride_with_c_order() {
         let mut strides = [0_isize; 3];
-        RowMajor::convert_shape_to_strides(&[2_usize, 3, 4], &mut strides);
+        RowMajor::convert_shape_to_default_strides(&[2_usize, 3, 4], &mut strides);
 
         assert_eq!(strides, [12, 4, 1]);
     }
@@ -206,7 +178,7 @@ mod tests {
     #[test]
     fn convert_shape_to_stride_with_f_order() {
         let mut strides = [0_isize; 3];
-        ColumnMajor::convert_shape_to_strides(&[2_usize, 3, 4], &mut strides);
+        ColumnMajor::convert_shape_to_default_strides(&[2_usize, 3, 4], &mut strides);
 
         assert_eq!(strides, [1, 2, 6]);
     }
