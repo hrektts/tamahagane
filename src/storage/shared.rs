@@ -24,23 +24,6 @@ impl<T> Storage<T> for StorageImpl<Arc<Vec<T>>>
 where
     T: Clone,
 {
-    type Cow<'a, U>
-    where
-        U: Clone + 'a,
-    = StorageImpl<Cow<'a, [U]>>;
-    type Owned<U>
-    where
-        U: Clone,
-    = StorageImpl<Vec<U>>;
-    type Shared<U>
-    where
-        U: Clone,
-    = StorageImpl<Arc<Vec<U>>>;
-    type View<'a, U>
-    where
-        U: Clone + 'a,
-    = StorageImpl<&'a [U]>;
-
     fn as_ptr(&self) -> *const T {
         self.0.as_ptr()
     }

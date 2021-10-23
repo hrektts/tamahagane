@@ -4,7 +4,11 @@ mod routine;
 mod shared;
 mod view;
 
+#[cfg(not(feature = "std"))]
+use alloc::{borrow::Cow, sync::Arc, vec::Vec};
 use core::iter::FromIterator;
+#[cfg(feature = "std")]
+use std::{borrow::Cow, sync::Arc};
 
 use num_traits::{One, Zero};
 
@@ -14,16 +18,20 @@ where
 {
     type Cow<'a, U>: FromIterator<U> + StorageMut<U>
     where
-        U: Clone + 'a;
+        U: Clone + 'a,
+    = StorageImpl<Cow<'a, [U]>>;
     type Owned<U>: FromIterator<U> + StorageMut<U> + StorageOwned<U>
     where
-        U: Clone;
+        U: Clone,
+    = StorageImpl<Vec<U>>;
     type Shared<U>: StorageOwned<U>
     where
-        U: Clone;
+        U: Clone,
+    = StorageImpl<Arc<Vec<U>>>;
     type View<'a, U>: Storage<U>
     where
-        U: Clone + 'a;
+        U: Clone + 'a,
+    = StorageImpl<&'a [U]>;
     fn as_ptr(&self) -> *const T;
     fn as_slice(&self) -> &[T];
     fn cow(&self) -> Self::Cow<'_, T>;
@@ -36,7 +44,8 @@ where
 {
     type ViewMut<'a, U>: Storage<U> + StorageMut<U>
     where
-        U: Clone + 'a;
+        U: Clone + 'a,
+    = StorageImpl<&'a mut [U]>;
     fn as_mut_ptr(&mut self) -> *mut T;
     fn as_mut_slice(&mut self) -> &mut [T];
     fn view_mut(&mut self) -> Self::ViewMut<'_, T>;

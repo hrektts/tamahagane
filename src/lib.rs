@@ -1,4 +1,5 @@
 #![feature(
+    associated_type_defaults,
     const_option,
     const_trait_impl,
     exact_size_is_empty,
