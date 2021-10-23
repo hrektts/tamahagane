@@ -390,6 +390,67 @@ impl_binary_op_for_scalar!(Mul, mul, f64);
 impl_binary_op_for_scalar!(Rem, rem, f64);
 impl_binary_op_for_scalar!(Sub, sub, f64);
 
+macro_rules! impl_binary_op_for_scalar_wrapped {
+    ($trait:ident, $op:ident, $wrapper:ident) => {
+        impl<D, O, S, T, U> $trait<Array<T, S, D, O>> for $wrapper<U>
+        where
+            Self: $trait<T, Output = T>,
+            D: Dimensionality,
+            O: Order,
+            S: StorageMut<T> + StorageOwned<T>,
+            T: Clone,
+            U: Copy,
+        {
+            type Output = Array<T, S, D, O>;
+
+            fn $op(self, mut rhs: Array<T, S, D, O>) -> Self::Output {
+                for elem in rhs.iter_mut() {
+                    *elem = self.$op(elem.clone())
+                }
+                rhs
+            }
+        }
+
+        impl<D, O, S, T, U> $trait<&Array<T, S, D, O>> for $wrapper<U>
+        where
+            Self: $trait<T, Output = T>,
+            D: Dimensionality,
+            O: Order,
+            S: Storage<T>,
+            T: Clone,
+            U: Copy,
+        {
+            type Output = Array<T, <S as Storage<T>>::Owned<T>, D, O>;
+
+            fn $op(self, rhs: &Array<T, S, D, O>) -> Self::Output {
+                let mut out = Self::Output::allocate_uninitialized(&rhs.shape);
+                for (dst, src) in out.iter_mut().zip(rhs.iter()) {
+                    *dst = self.$op(src.clone())
+                }
+                out
+            }
+        }
+    };
+}
+
+macro_rules! impl_all_binary_op_for_scalar_wrapped {
+    ($wrapper:ident) => {
+        impl_binary_op_for_scalar_wrapped!(Add, add, $wrapper);
+        impl_binary_op_for_scalar_wrapped!(BitAnd, bitand, $wrapper);
+        impl_binary_op_for_scalar_wrapped!(BitOr, bitor, $wrapper);
+        impl_binary_op_for_scalar_wrapped!(BitXor, bitxor, $wrapper);
+        impl_binary_op_for_scalar_wrapped!(Div, div, $wrapper);
+        impl_binary_op_for_scalar_wrapped!(Mul, mul, $wrapper);
+        impl_binary_op_for_scalar_wrapped!(Rem, rem, $wrapper);
+        impl_binary_op_for_scalar_wrapped!(Shl, shl, $wrapper);
+        impl_binary_op_for_scalar_wrapped!(Shr, shr, $wrapper);
+        impl_binary_op_for_scalar_wrapped!(Sub, sub, $wrapper);
+    };
+}
+
+impl_all_binary_op_for_scalar_wrapped!(Complex);
+impl_all_binary_op_for_scalar_wrapped!(Wrapping);
+
 macro_rules! impl_binary_assign_op {
     ($trait:ident, $op:ident) => {
         impl<D, D1, O, S, S1, T, T1> $trait<&Array<T1, S1, D1, O>> for Array<T, S, D, O>
