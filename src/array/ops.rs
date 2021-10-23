@@ -17,6 +17,28 @@ use crate::{
     Dimensionality, DimensionalityMax, NDArray, NDArrayMut, NDArrayOwned, Order, Shape,
 };
 
+pub trait Scalar: Copy {}
+
+impl Scalar for bool {}
+impl Scalar for usize {}
+impl Scalar for u8 {}
+impl Scalar for u16 {}
+impl Scalar for u32 {}
+impl Scalar for u64 {}
+#[cfg(has_i128)]
+impl Scalar for u128 {}
+impl Scalar for isize {}
+impl Scalar for i8 {}
+impl Scalar for i16 {}
+impl Scalar for i32 {}
+impl Scalar for i64 {}
+#[cfg(has_i128)]
+impl Scalar for i128 {}
+impl Scalar for f32 {}
+impl Scalar for f64 {}
+impl<T> Scalar for Complex<T> where T: Copy {}
+impl<T> Scalar for Wrapping<T> where T: Copy {}
+
 macro_rules! impl_unary_op {
     ($trait:ident, $op:ident) => {
         impl<D, O, S, T> $trait for Array<T, S, D, O>
@@ -184,80 +206,6 @@ macro_rules! impl_binary_op {
                 out
             }
         }
-
-        impl<D, O, S, T, T1> $trait<Wrapping<T1>> for Array<T, S, D, O>
-        where
-            D: Dimensionality,
-            O: Order,
-            S: StorageMut<T> + StorageOwned<T>,
-            T: $trait<Wrapping<T1>, Output = T> + Clone,
-            T1: Copy,
-        {
-            type Output = Array<T, S, D, O>;
-
-            fn $op(mut self, rhs: Wrapping<T1>) -> Self::Output {
-                for elem in self.iter_mut() {
-                    *elem = elem.clone().$op(rhs);
-                }
-                self
-            }
-        }
-
-        impl<D, O, S, T, T1> $trait<Wrapping<T1>> for &Array<T, S, D, O>
-        where
-            D: Dimensionality,
-            O: Order,
-            S: Storage<T>,
-            T: $trait<Wrapping<T1>, Output = T> + Clone,
-            T1: Copy,
-        {
-            type Output = Array<T, <S as Storage<T>>::Owned<T>, D, O>;
-
-            fn $op(self, rhs: Wrapping<T1>) -> Self::Output {
-                let mut out = Self::Output::allocate_uninitialized(&self.shape);
-                for (dst, src) in out.iter_mut().zip(self.iter()) {
-                    *dst = src.clone().$op(rhs);
-                }
-                out
-            }
-        }
-
-        impl<D, O, S, T, T1> $trait<Complex<T1>> for Array<T, S, D, O>
-        where
-            D: Dimensionality,
-            O: Order,
-            S: StorageMut<T> + StorageOwned<T>,
-            T: $trait<Complex<T1>, Output = T> + Clone,
-            T1: Copy,
-        {
-            type Output = Array<T, S, D, O>;
-
-            fn $op(mut self, rhs: Complex<T1>) -> Self::Output {
-                for elem in self.iter_mut() {
-                    *elem = elem.clone().$op(rhs);
-                }
-                self
-            }
-        }
-
-        impl<D, O, S, T, T1> $trait<Complex<T1>> for &Array<T, S, D, O>
-        where
-            D: Dimensionality,
-            O: Order,
-            S: Storage<T>,
-            T: $trait<Complex<T1>, Output = T> + Clone,
-            T1: Copy,
-        {
-            type Output = Array<T, <S as Storage<T>>::Owned<T>, D, O>;
-
-            fn $op(self, rhs: Complex<T1>) -> Self::Output {
-                let mut out = Self::Output::allocate_uninitialized(&self.shape);
-                for (dst, src) in out.iter_mut().zip(self.iter()) {
-                    *dst = src.clone().$op(rhs);
-                }
-                out
-            }
-        }
     };
 }
 
@@ -273,17 +221,18 @@ impl_binary_op!(Shr, shr);
 impl_binary_op!(Sub, sub);
 
 macro_rules! impl_binary_op_with_scalar {
-    ($trait:ident, $op:ident, $scalar_type:ty) => {
-        impl<D, O, S, T> $trait<$scalar_type> for Array<T, S, D, O>
+    ($trait:ident, $op:ident) => {
+        impl<D, O, S, T, U> $trait<U> for Array<T, S, D, O>
         where
             D: Dimensionality,
             O: Order,
             S: StorageMut<T> + StorageOwned<T>,
-            T: $trait<$scalar_type, Output = T> + Clone,
+            T: $trait<U, Output = T> + Clone,
+            U: Scalar,
         {
             type Output = Array<T, S, D, O>;
 
-            fn $op(mut self, rhs: $scalar_type) -> Self::Output {
+            fn $op(mut self, rhs: U) -> Self::Output {
                 for elem in self.iter_mut() {
                     *elem = elem.clone().$op(rhs);
                 }
@@ -291,16 +240,17 @@ macro_rules! impl_binary_op_with_scalar {
             }
         }
 
-        impl<D, O, S, T> $trait<$scalar_type> for &Array<T, S, D, O>
+        impl<D, O, S, T, U> $trait<U> for &Array<T, S, D, O>
         where
             D: Dimensionality,
             O: Order,
             S: Storage<T>,
-            T: $trait<$scalar_type, Output = T> + Clone,
+            T: $trait<U, Output = T> + Clone,
+            U: Scalar,
         {
             type Output = Array<T, <S as Storage<T>>::Owned<T>, D, O>;
 
-            fn $op(self, rhs: $scalar_type) -> Self::Output {
+            fn $op(self, rhs: U) -> Self::Output {
                 let mut out = Self::Output::allocate_uninitialized(&self.shape);
                 for (dst, src) in out.iter_mut().zip(self.iter()) {
                     *dst = src.clone().$op(rhs);
@@ -311,38 +261,16 @@ macro_rules! impl_binary_op_with_scalar {
     };
 }
 
-macro_rules! impl_all_binary_op_with_scalar {
-    ($scalar_type:ty) => {
-        impl_binary_op_with_scalar!(Add, add, $scalar_type);
-        impl_binary_op_with_scalar!(BitAnd, bitand, $scalar_type);
-        impl_binary_op_with_scalar!(BitOr, bitor, $scalar_type);
-        impl_binary_op_with_scalar!(BitXor, bitxor, $scalar_type);
-        impl_binary_op_with_scalar!(Div, div, $scalar_type);
-        impl_binary_op_with_scalar!(Mul, mul, $scalar_type);
-        impl_binary_op_with_scalar!(Rem, rem, $scalar_type);
-        impl_binary_op_with_scalar!(Shl, shl, $scalar_type);
-        impl_binary_op_with_scalar!(Shr, shr, $scalar_type);
-        impl_binary_op_with_scalar!(Sub, sub, $scalar_type);
-    };
-}
-
-impl_all_binary_op_with_scalar!(bool);
-impl_all_binary_op_with_scalar!(usize);
-impl_all_binary_op_with_scalar!(u8);
-impl_all_binary_op_with_scalar!(u16);
-impl_all_binary_op_with_scalar!(u32);
-impl_all_binary_op_with_scalar!(u64);
-#[cfg(has_i128)]
-impl_all_binary_op_with_scalar!(u128);
-impl_all_binary_op_with_scalar!(isize);
-impl_all_binary_op_with_scalar!(i8);
-impl_all_binary_op_with_scalar!(i16);
-impl_all_binary_op_with_scalar!(i32);
-impl_all_binary_op_with_scalar!(i64);
-#[cfg(has_i128)]
-impl_all_binary_op_with_scalar!(i128);
-impl_all_binary_op_with_scalar!(f32);
-impl_all_binary_op_with_scalar!(f64);
+impl_binary_op_with_scalar!(Add, add);
+impl_binary_op_with_scalar!(BitAnd, bitand);
+impl_binary_op_with_scalar!(BitOr, bitor);
+impl_binary_op_with_scalar!(BitXor, bitxor);
+impl_binary_op_with_scalar!(Div, div);
+impl_binary_op_with_scalar!(Mul, mul);
+impl_binary_op_with_scalar!(Rem, rem);
+impl_binary_op_with_scalar!(Shl, shl);
+impl_binary_op_with_scalar!(Shr, shr);
+impl_binary_op_with_scalar!(Sub, sub);
 
 macro_rules! impl_binary_op_for_scalar {
     ($trait:ident, $op:ident, $scalar_type:ty) => {
@@ -446,36 +374,6 @@ macro_rules! impl_binary_assign_op {
                 }
             }
         }
-
-        impl<D, O, S, T, T1> $trait<Wrapping<T1>> for Array<T, S, D, O>
-        where
-            D: Dimensionality,
-            O: Order,
-            S: StorageMut<T>,
-            T: $trait<Wrapping<T1>> + Clone,
-            T1: Copy,
-        {
-            fn $op(&mut self, rhs: Wrapping<T1>) {
-                for elem in self.iter_mut() {
-                    elem.$op(rhs)
-                }
-            }
-        }
-
-        impl<D, O, S, T, T1> $trait<Complex<T1>> for Array<T, S, D, O>
-        where
-            D: Dimensionality,
-            O: Order,
-            S: StorageMut<T>,
-            T: $trait<Complex<T1>> + Clone,
-            T1: Copy,
-        {
-            fn $op(&mut self, rhs: Complex<T1>) {
-                for elem in self.iter_mut() {
-                    elem.$op(rhs)
-                }
-            }
-        }
     };
 }
 
@@ -491,15 +389,16 @@ impl_binary_assign_op!(ShrAssign, shr_assign);
 impl_binary_assign_op!(SubAssign, sub_assign);
 
 macro_rules! impl_binary_assign_op_with_scalar {
-    ($trait:ident, $op:ident, $scalar_type:ty) => {
-        impl<D, O, S, T> $trait<$scalar_type> for Array<T, S, D, O>
+    ($trait:ident, $op:ident) => {
+        impl<D, O, S, T, U> $trait<U> for Array<T, S, D, O>
         where
             D: Dimensionality,
             O: Order,
             S: StorageMut<T>,
-            T: $trait<$scalar_type> + Clone,
+            T: $trait<U> + Clone,
+            U: Scalar,
         {
-            fn $op(&mut self, rhs: $scalar_type) {
+            fn $op(&mut self, rhs: U) {
                 for elem in self.iter_mut() {
                     elem.$op(rhs)
                 }
@@ -508,38 +407,16 @@ macro_rules! impl_binary_assign_op_with_scalar {
     };
 }
 
-macro_rules! impl_all_binary_assign_op_with_scalar {
-    ($scalar_type:ty) => {
-        impl_binary_assign_op_with_scalar!(AddAssign, add_assign, $scalar_type);
-        impl_binary_assign_op_with_scalar!(BitAndAssign, bitand_assign, $scalar_type);
-        impl_binary_assign_op_with_scalar!(BitOrAssign, bitor_assign, $scalar_type);
-        impl_binary_assign_op_with_scalar!(BitXorAssign, bitxor_assign, $scalar_type);
-        impl_binary_assign_op_with_scalar!(DivAssign, div_assign, $scalar_type);
-        impl_binary_assign_op_with_scalar!(MulAssign, mul_assign, $scalar_type);
-        impl_binary_assign_op_with_scalar!(RemAssign, rem_assign, $scalar_type);
-        impl_binary_assign_op_with_scalar!(ShlAssign, shl_assign, $scalar_type);
-        impl_binary_assign_op_with_scalar!(ShrAssign, shr_assign, $scalar_type);
-        impl_binary_assign_op_with_scalar!(SubAssign, sub_assign, $scalar_type);
-    };
-}
-
-impl_all_binary_assign_op_with_scalar!(bool);
-impl_all_binary_assign_op_with_scalar!(usize);
-impl_all_binary_assign_op_with_scalar!(u8);
-impl_all_binary_assign_op_with_scalar!(u16);
-impl_all_binary_assign_op_with_scalar!(u32);
-impl_all_binary_assign_op_with_scalar!(u64);
-#[cfg(has_i128)]
-impl_all_binary_assign_op_with_scalar!(u128);
-impl_all_binary_assign_op_with_scalar!(isize);
-impl_all_binary_assign_op_with_scalar!(i8);
-impl_all_binary_assign_op_with_scalar!(i16);
-impl_all_binary_assign_op_with_scalar!(i32);
-impl_all_binary_assign_op_with_scalar!(i64);
-#[cfg(has_i128)]
-impl_all_binary_assign_op_with_scalar!(i128);
-impl_all_binary_assign_op_with_scalar!(f32);
-impl_all_binary_assign_op_with_scalar!(f64);
+impl_binary_assign_op_with_scalar!(AddAssign, add_assign);
+impl_binary_assign_op_with_scalar!(BitAndAssign, bitand_assign);
+impl_binary_assign_op_with_scalar!(BitOrAssign, bitor_assign);
+impl_binary_assign_op_with_scalar!(BitXorAssign, bitxor_assign);
+impl_binary_assign_op_with_scalar!(DivAssign, div_assign);
+impl_binary_assign_op_with_scalar!(MulAssign, mul_assign);
+impl_binary_assign_op_with_scalar!(RemAssign, rem_assign);
+impl_binary_assign_op_with_scalar!(ShlAssign, shl_assign);
+impl_binary_assign_op_with_scalar!(ShrAssign, shr_assign);
+impl_binary_assign_op_with_scalar!(SubAssign, sub_assign);
 
 #[cfg(test)]
 mod tests {

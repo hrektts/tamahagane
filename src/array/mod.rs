@@ -4,6 +4,7 @@ mod iter;
 pub use iter::{Iter, IterMut};
 
 mod ops;
+pub use ops::Scalar;
 
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;

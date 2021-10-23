@@ -13,7 +13,7 @@
 extern crate alloc;
 
 mod array;
-pub use array::{Array, Iter, IterMut};
+pub use array::{Array, Iter, IterMut, Scalar};
 
 mod array_index;
 pub use array_index::{ArrayIndex, NewAxis};
