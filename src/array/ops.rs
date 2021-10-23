@@ -174,13 +174,47 @@ macro_rules! impl_binary_op {
             O: Order,
             S: Storage<T>,
             S1: StorageMut<T1> + StorageOwned<T1>,
-            T: Clone,
-            T1: $trait<T, Output = T1> + Clone,
+            T: $trait<T1, Output = T1> + Clone,
+            T1: Clone,
         {
             type Output = Array<T1, S1, <D1 as DimensionalityMax<D>>::Output, O>;
 
-            fn $op(self, rhs: Array<T1, S1, D1, O>) -> Self::Output {
-                rhs.$op(self)
+            fn $op(self, mut rhs: Array<T1, S1, D1, O>) -> Self::Output {
+                let out_shape = routine::broadcast_shape::<D1, D>(&rhs.shape, &self.shape).unwrap();
+
+                if self.shape.as_ref() == rhs.shape.as_ref() {
+                    for (dst, src) in rhs.iter_mut().zip(self.iter()) {
+                        *dst = src.clone().$op(dst.clone());
+                    }
+                    Array {
+                        strides: convert_strides::<D1, D>(&rhs.strides, out_shape.n_dims()),
+                        shape: out_shape,
+                        storage: rhs.storage,
+                        offset: rhs.offset,
+                        phantom: PhantomData,
+                    }
+                } else if self.shape.as_ref() == out_shape.as_ref() {
+                    for (dst, src) in rhs.iter_mut().zip(
+                        self.broadcast_to::<<D1 as DimensionalityMax<D>>::Output>(&out_shape)
+                            .unwrap()
+                            .iter(),
+                    ) {
+                        *dst = src.clone().$op(dst.clone());
+                    }
+                    Array {
+                        strides: convert_strides::<D1, D>(&rhs.strides, out_shape.n_dims()),
+                        shape: out_shape,
+                        storage: rhs.storage,
+                        offset: rhs.offset,
+                        phantom: PhantomData,
+                    }
+                } else {
+                    let mut out = Self::Output::allocate_uninitialized(&out_shape);
+                    for (dst, (l, r)) in out.iter_mut().zip(self.iter().zip(rhs.iter())) {
+                        *dst = l.clone().$op(r.clone());
+                    }
+                    out
+                }
             }
         }
 
@@ -274,31 +308,37 @@ impl_binary_op_with_scalar!(Sub, sub);
 
 macro_rules! impl_binary_op_for_scalar {
     ($trait:ident, $op:ident, $scalar_type:ty) => {
-        impl<D, O, S, T> $trait<Array<T, S, D, O>> for $scalar_type
+        impl<D, O, S> $trait<Array<$scalar_type, S, D, O>> for $scalar_type
         where
             D: Dimensionality,
             O: Order,
-            S: StorageMut<T> + StorageOwned<T>,
-            T: $trait<$scalar_type, Output = T> + Clone,
+            S: StorageMut<$scalar_type> + StorageOwned<$scalar_type>,
         {
-            type Output = Array<T, S, D, O>;
+            type Output = Array<$scalar_type, S, D, O>;
 
-            fn $op(self, rhs: Array<T, S, D, O>) -> Self::Output {
-                rhs.$op(self)
+            fn $op(self, mut rhs: Array<$scalar_type, S, D, O>) -> Self::Output {
+                for elem in rhs.iter_mut() {
+                    *elem = self.$op(elem.clone())
+                }
+                rhs
             }
         }
 
-        impl<D, O, S, T> $trait<&Array<T, S, D, O>> for $scalar_type
+        impl<D, O, S> $trait<&Array<$scalar_type, S, D, O>> for $scalar_type
         where
             D: Dimensionality,
             O: Order,
-            S: Storage<T>,
-            T: $trait<$scalar_type, Output = T> + Clone,
+            S: Storage<$scalar_type>,
         {
-            type Output = Array<T, <S as Storage<T>>::Owned<T>, D, O>;
+            type Output =
+                Array<$scalar_type, <S as Storage<$scalar_type>>::Owned<$scalar_type>, D, O>;
 
-            fn $op(self, rhs: &Array<T, S, D, O>) -> Self::Output {
-                rhs.$op(self)
+            fn $op(self, rhs: &Array<$scalar_type, S, D, O>) -> Self::Output {
+                let mut out = Self::Output::allocate_uninitialized(&rhs.shape);
+                for (dst, src) in out.iter_mut().zip(rhs.iter()) {
+                    *dst = self.$op(src.clone())
+                }
+                out
             }
         }
     };
@@ -319,7 +359,10 @@ macro_rules! impl_all_binary_op_for_scalar {
     };
 }
 
-impl_all_binary_op_for_scalar!(bool);
+impl_binary_op_for_scalar!(BitAnd, bitand, bool);
+impl_binary_op_for_scalar!(BitOr, bitor, bool);
+impl_binary_op_for_scalar!(BitXor, bitxor, bool);
+
 impl_all_binary_op_for_scalar!(usize);
 impl_all_binary_op_for_scalar!(u8);
 impl_all_binary_op_for_scalar!(u16);
@@ -334,8 +377,18 @@ impl_all_binary_op_for_scalar!(i32);
 impl_all_binary_op_for_scalar!(i64);
 #[cfg(has_i128)]
 impl_all_binary_op_for_scalar!(i128);
-impl_all_binary_op_for_scalar!(f32);
-impl_all_binary_op_for_scalar!(f64);
+
+impl_binary_op_for_scalar!(Add, add, f32);
+impl_binary_op_for_scalar!(Div, div, f32);
+impl_binary_op_for_scalar!(Mul, mul, f32);
+impl_binary_op_for_scalar!(Rem, rem, f32);
+impl_binary_op_for_scalar!(Sub, sub, f32);
+
+impl_binary_op_for_scalar!(Add, add, f64);
+impl_binary_op_for_scalar!(Div, div, f64);
+impl_binary_op_for_scalar!(Mul, mul, f64);
+impl_binary_op_for_scalar!(Rem, rem, f64);
+impl_binary_op_for_scalar!(Sub, sub, f64);
 
 macro_rules! impl_binary_assign_op {
     ($trait:ident, $op:ident) => {
@@ -452,81 +505,95 @@ mod tests {
 
     #[test]
     fn binary_ops() {
-        let a3 = (0_usize..)
+        let a3_ = (10_usize..)
             .take(24)
             .collect::<Array<_, _, _>>()
             .into_shape(vec![2, 3, 4])
             .unwrap();
-        let b3 = (10_usize..)
+        let a3 = a3_.slice(crate::s!(.., .., 2..));
+        let b3_ = (0_usize..)
             .take(24)
             .collect::<Array<_, _, _>>()
             .into_shape(vec![2, 3, 4])
             .unwrap();
+        let b3 = b3_.slice(crate::s!(.., .., 2..));
         {
-            let subject = a3.to_owned_array() + b3.to_owned_array();
+            let subject = a3.to_owned_array() - b3.to_owned_array();
 
-            assert_eq!(subject.len(), 24);
-            for (i, (&actual, expected)) in subject.iter().zip((10_usize..).step_by(2)).enumerate()
+            assert_eq!(subject.len(), 12);
+            for (i, &elem) in subject.iter().enumerate() {
+                assert_eq!(elem, 10, "{}th element is not equal", i);
+            }
+        }
+        {
+            let subject = a3.to_owned_array() - &b3;
+
+            assert_eq!(subject.len(), 12);
+            for (i, &elem) in subject.iter().enumerate() {
+                assert_eq!(elem, 10, "{}th element is not equal", i);
+            }
+        }
+        {
+            let subject = &a3 - b3.to_owned_array();
+
+            assert_eq!(subject.len(), 12);
+            for (i, &elem) in subject.iter().enumerate() {
+                assert_eq!(elem, 10, "{}th element is not equal", i);
+            }
+        }
+        {
+            let subject = &a3 - &b3;
+
+            assert_eq!(subject.len(), 12);
+            for (i, &elem) in subject.iter().enumerate() {
+                assert_eq!(elem, 10, "{}th element is not equal", i);
+            }
+        }
+        {
+            let subject = a3.to_owned_array() - 3;
+
+            assert_eq!(subject.len(), 12);
+            for (i, (&actual, expected)) in subject
+                .iter()
+                .zip([9, 10, 13, 14, 17, 18, 21, 22])
+                .enumerate()
             {
                 assert_eq!(actual, expected, "{}th element is not equal", i);
             }
         }
         {
-            let subject = a3.to_owned_array() + &b3;
+            let subject = &a3 - 3;
 
-            assert_eq!(subject.len(), 24);
-            for (i, (&actual, expected)) in subject.iter().zip((10_usize..).step_by(2)).enumerate()
+            assert_eq!(subject.len(), 12);
+            for (i, (&actual, expected)) in subject
+                .iter()
+                .zip([9, 10, 13, 14, 17, 18, 21, 22])
+                .enumerate()
             {
                 assert_eq!(actual, expected, "{}th element is not equal", i);
             }
         }
         {
-            let subject = &a3 + b3.to_owned_array();
+            let subject = 23 - b3.to_owned_array();
 
-            assert_eq!(subject.len(), 24);
-            for (i, (&actual, expected)) in subject.iter().zip((10_usize..).step_by(2)).enumerate()
+            assert_eq!(subject.len(), 12);
+            for (i, (&actual, expected)) in subject
+                .iter()
+                .zip([21, 20, 17, 16, 13, 12, 9, 8, 5, 4, 1, 0])
+                .enumerate()
             {
                 assert_eq!(actual, expected, "{}th element is not equal", i);
             }
         }
         {
-            let subject = &a3 + &b3;
+            let subject = 23 - &b3;
 
-            assert_eq!(subject.len(), 24);
-            for (i, (&actual, expected)) in subject.iter().zip((10_usize..).step_by(2)).enumerate()
+            assert_eq!(subject.len(), 12);
+            for (i, (&actual, expected)) in subject
+                .iter()
+                .zip([21, 20, 17, 16, 13, 12, 9, 8, 5, 4, 1, 0])
+                .enumerate()
             {
-                assert_eq!(actual, expected, "{}th element is not equal", i);
-            }
-        }
-        {
-            let subject = a3.to_owned_array() + 3;
-
-            assert_eq!(subject.len(), 24);
-            for (i, (&actual, expected)) in subject.iter().zip(3_usize..).enumerate() {
-                assert_eq!(actual, expected, "{}th element is not equal", i);
-            }
-        }
-        {
-            let subject = &a3 + 3;
-
-            assert_eq!(subject.len(), 24);
-            for (i, (&actual, expected)) in subject.iter().zip(3_usize..).enumerate() {
-                assert_eq!(actual, expected, "{}th element is not equal", i);
-            }
-        }
-        {
-            let subject = 3 + b3.to_owned_array();
-
-            assert_eq!(subject.len(), 24);
-            for (i, (&actual, expected)) in subject.iter().zip(13_usize..).enumerate() {
-                assert_eq!(actual, expected, "{}th element is not equal", i);
-            }
-        }
-        {
-            let subject = 3 + &b3;
-
-            assert_eq!(subject.len(), 24);
-            for (i, (&actual, expected)) in subject.iter().zip(13_usize..).enumerate() {
                 assert_eq!(actual, expected, "{}th element is not equal", i);
             }
         }
@@ -534,32 +601,37 @@ mod tests {
 
     #[test]
     fn binary_assign_ops() {
-        let a3 = (0_usize..)
+        let a3_ = (10_usize..)
             .take(24)
             .collect::<Array<_, _, _>>()
             .into_shape(vec![2, 3, 4])
             .unwrap();
-        let b3 = (10_usize..)
+        let a3 = a3_.slice(crate::s!(.., .., 2..));
+        let b3_ = (0_usize..)
             .take(24)
             .collect::<Array<_, _, _>>()
             .into_shape(vec![2, 3, 4])
             .unwrap();
+        let b3 = b3_.slice(crate::s!(.., .., 2..));
         {
             let mut subject = a3.to_owned_array();
-            subject += &b3;
+            subject -= &b3;
 
-            assert_eq!(subject.len(), 24);
-            for (i, (&actual, expected)) in subject.iter().zip((10_usize..).step_by(2)).enumerate()
-            {
-                assert_eq!(actual, expected, "{}th element is not equal", i);
+            assert_eq!(subject.len(), 12);
+            for (i, &elem) in subject.iter().enumerate() {
+                assert_eq!(elem, 10, "{}th element is not equal", i);
             }
         }
         {
             let mut subject = a3.to_owned_array();
-            subject += 3;
+            subject -= 3;
 
-            assert_eq!(subject.len(), 24);
-            for (i, (&actual, expected)) in subject.iter().zip(3_usize..).enumerate() {
+            assert_eq!(subject.len(), 12);
+            for (i, (&actual, expected)) in subject
+                .iter()
+                .zip([9, 10, 13, 14, 17, 18, 21, 22])
+                .enumerate()
+            {
                 assert_eq!(actual, expected, "{}th element is not equal", i);
             }
         }
