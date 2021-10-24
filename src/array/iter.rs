@@ -104,11 +104,10 @@ impl<'a, T, D> Iter<'a, T, D>
 where
     D: Dimensionality,
 {
-    pub(super) fn new<S, O>(a: &Array<T, S, D, O>) -> Self
+    pub(super) fn new<S, O>(a: &Array<S, D, O>) -> Self
     where
         D: Dimensionality,
-        S: Storage<T>,
-        T: Clone,
+        S: Storage<Elem = T>,
     {
         let ptr = unsafe { a.storage.as_ptr().add(a.offset) };
         debug_assert!(!ptr.is_null());
@@ -142,11 +141,10 @@ impl<'a, T, D> IterMut<'a, T, D>
 where
     D: Dimensionality,
 {
-    pub(super) fn new<S, O>(a: &mut Array<T, S, D, O>) -> Self
+    pub(super) fn new<S, O>(a: &mut Array<S, D, O>) -> Self
     where
         D: Dimensionality,
-        S: StorageMut<T>,
-        T: Clone,
+        S: StorageMut<Elem = T>,
     {
         let ptr = unsafe { a.storage.as_mut_ptr().add(a.offset) };
         debug_assert!(!ptr.is_null());

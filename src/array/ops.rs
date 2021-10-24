@@ -41,14 +41,14 @@ impl<T> Scalar for Wrapping<T> where T: Copy {}
 
 macro_rules! impl_unary_op {
     ($trait:ident, $op:ident) => {
-        impl<D, O, S, T> $trait for Array<T, S, D, O>
+        impl<D, O, S> $trait for Array<S, D, O>
         where
             D: Dimensionality,
             O: Order,
-            S: StorageMut<T> + StorageOwned<T>,
-            T: $trait<Output = T> + Clone,
+            S: StorageMut + StorageOwned,
+            <S as Storage>::Elem: $trait<Output = <S as Storage>::Elem>,
         {
-            type Output = Array<T, S, D, O>;
+            type Output = Array<S, D, O>;
 
             fn $op(mut self) -> Self::Output {
                 for elem in self.iter_mut() {
@@ -58,14 +58,14 @@ macro_rules! impl_unary_op {
             }
         }
 
-        impl<D, O, S, T> $trait for &Array<T, S, D, O>
+        impl<D, O, S> $trait for &Array<S, D, O>
         where
             D: Dimensionality,
             O: Order,
-            S: Storage<T>,
-            T: $trait<Output = T> + Clone,
+            S: Storage,
+            <S as Storage>::Elem: $trait<Output = <S as Storage>::Elem>,
         {
-            type Output = Array<T, <S as Storage<T>>::Owned<T>, D, O>;
+            type Output = Array<<S as Storage>::Owned, D, O>;
 
             fn $op(self) -> Self::Output {
                 let mut out = Self::Output::allocate_uninitialized(&self.shape);
@@ -99,36 +99,34 @@ where
 
 macro_rules! impl_binary_op {
     ($trait:ident, $op:ident) => {
-        impl<D, D1, O, S, S1, T, T1> $trait<Array<T1, S1, D1, O>> for Array<T, S, D, O>
+        impl<D, D1, O, S, S1> $trait<Array<S1, D1, O>> for Array<S, D, O>
         where
             D: Dimensionality + DimensionalityMax<D1>,
             D1: Dimensionality,
             O: Order,
-            S: StorageMut<T> + StorageOwned<T>,
-            S1: Storage<T1>,
-            T: $trait<T1, Output = T> + Clone,
-            T1: Clone,
+            S: StorageMut + StorageOwned,
+            <S as Storage>::Elem: $trait<<S1 as Storage>::Elem, Output = <S as Storage>::Elem>,
+            S1: Storage,
         {
-            type Output = Array<T, S, <D as DimensionalityMax<D1>>::Output, O>;
+            type Output = Array<S, <D as DimensionalityMax<D1>>::Output, O>;
 
-            fn $op(self, rhs: Array<T1, S1, D1, O>) -> Self::Output {
+            fn $op(self, rhs: Array<S1, D1, O>) -> Self::Output {
                 self.$op(&rhs)
             }
         }
 
-        impl<D, D1, O, S, S1, T, T1> $trait<&Array<T1, S1, D1, O>> for Array<T, S, D, O>
+        impl<D, D1, O, S, S1> $trait<&Array<S1, D1, O>> for Array<S, D, O>
         where
             D: Dimensionality + DimensionalityMax<D1>,
             D1: Dimensionality,
             O: Order,
-            S: StorageMut<T> + StorageOwned<T>,
-            S1: Storage<T1>,
-            T: $trait<T1, Output = T> + Clone,
-            T1: Clone,
+            S: StorageMut + StorageOwned,
+            <S as Storage>::Elem: $trait<<S1 as Storage>::Elem, Output = <S as Storage>::Elem>,
+            S1: Storage,
         {
-            type Output = Array<T, S, <D as DimensionalityMax<D1>>::Output, O>;
+            type Output = Array<S, <D as DimensionalityMax<D1>>::Output, O>;
 
-            fn $op(mut self, rhs: &Array<T1, S1, D1, O>) -> Self::Output {
+            fn $op(mut self, rhs: &Array<S1, D1, O>) -> Self::Output {
                 let out_shape = routine::broadcast_shape::<D, D1>(&self.shape, &rhs.shape).unwrap();
 
                 if self.shape.as_ref() == rhs.shape.as_ref() {
@@ -167,19 +165,18 @@ macro_rules! impl_binary_op {
             }
         }
 
-        impl<D, D1, O, S, S1, T, T1> $trait<Array<T1, S1, D1, O>> for &Array<T, S, D, O>
+        impl<D, D1, O, S, S1> $trait<Array<S1, D1, O>> for &Array<S, D, O>
         where
             D: Dimensionality,
             D1: Dimensionality + DimensionalityMax<D>,
             O: Order,
-            S: Storage<T>,
-            S1: StorageMut<T1> + StorageOwned<T1>,
-            T: $trait<T1, Output = T1> + Clone,
-            T1: Clone,
+            S: Storage,
+            <S as Storage>::Elem: $trait<<S1 as Storage>::Elem, Output = <S1 as Storage>::Elem>,
+            S1: StorageMut + StorageOwned,
         {
-            type Output = Array<T1, S1, <D1 as DimensionalityMax<D>>::Output, O>;
+            type Output = Array<S1, <D1 as DimensionalityMax<D>>::Output, O>;
 
-            fn $op(self, mut rhs: Array<T1, S1, D1, O>) -> Self::Output {
+            fn $op(self, mut rhs: Array<S1, D1, O>) -> Self::Output {
                 let out_shape = routine::broadcast_shape::<D1, D>(&rhs.shape, &self.shape).unwrap();
 
                 if self.shape.as_ref() == rhs.shape.as_ref() {
@@ -218,20 +215,18 @@ macro_rules! impl_binary_op {
             }
         }
 
-        impl<D, D1, O, S, S1, T, T1> $trait<&Array<T1, S1, D1, O>> for &Array<T, S, D, O>
+        impl<D, D1, O, S, S1> $trait<&Array<S1, D1, O>> for &Array<S, D, O>
         where
             D: Dimensionality + DimensionalityMax<D1>,
             D1: Dimensionality,
             O: Order,
-            S: Storage<T>,
-            S1: Storage<T1>,
-            T: $trait<T1, Output = T> + Clone,
-            T1: Clone,
+            S: Storage,
+            <S as Storage>::Elem: $trait<<S1 as Storage>::Elem, Output = <S as Storage>::Elem>,
+            S1: Storage,
         {
-            type Output =
-                Array<T, <S as Storage<T>>::Owned<T>, <D as DimensionalityMax<D1>>::Output, O>;
+            type Output = Array<<S as Storage>::Owned, <D as DimensionalityMax<D1>>::Output, O>;
 
-            fn $op(self, rhs: &Array<T1, S1, D1, O>) -> Self::Output {
+            fn $op(self, rhs: &Array<S1, D1, O>) -> Self::Output {
                 let out_shape = routine::broadcast_shape::<D, D1>(&self.shape, &rhs.shape).unwrap();
                 let mut out = Self::Output::allocate_uninitialized(&out_shape);
                 for (dst, (l, r)) in out.iter_mut().zip(self.iter().zip(rhs.iter())) {
@@ -256,17 +251,17 @@ impl_binary_op!(Sub, sub);
 
 macro_rules! impl_binary_op_with_scalar {
     ($trait:ident, $op:ident) => {
-        impl<D, O, S, T, U> $trait<U> for Array<T, S, D, O>
+        impl<D, O, S, T> $trait<T> for Array<S, D, O>
         where
             D: Dimensionality,
             O: Order,
-            S: StorageMut<T> + StorageOwned<T>,
-            T: $trait<U, Output = T> + Clone,
-            U: Scalar,
+            S: StorageMut + StorageOwned,
+            <S as Storage>::Elem: $trait<T, Output = <S as Storage>::Elem>,
+            T: Scalar,
         {
-            type Output = Array<T, S, D, O>;
+            type Output = Array<S, D, O>;
 
-            fn $op(mut self, rhs: U) -> Self::Output {
+            fn $op(mut self, rhs: T) -> Self::Output {
                 for elem in self.iter_mut() {
                     *elem = elem.clone().$op(rhs);
                 }
@@ -274,17 +269,17 @@ macro_rules! impl_binary_op_with_scalar {
             }
         }
 
-        impl<D, O, S, T, U> $trait<U> for &Array<T, S, D, O>
+        impl<D, O, S, T> $trait<T> for &Array<S, D, O>
         where
             D: Dimensionality,
             O: Order,
-            S: Storage<T>,
-            T: $trait<U, Output = T> + Clone,
-            U: Scalar,
+            S: Storage,
+            <S as Storage>::Elem: $trait<T, Output = <S as Storage>::Elem>,
+            T: Scalar,
         {
-            type Output = Array<T, <S as Storage<T>>::Owned<T>, D, O>;
+            type Output = Array<<S as Storage>::Owned, D, O>;
 
-            fn $op(self, rhs: U) -> Self::Output {
+            fn $op(self, rhs: T) -> Self::Output {
                 let mut out = Self::Output::allocate_uninitialized(&self.shape);
                 for (dst, src) in out.iter_mut().zip(self.iter()) {
                     *dst = src.clone().$op(rhs);
@@ -308,15 +303,15 @@ impl_binary_op_with_scalar!(Sub, sub);
 
 macro_rules! impl_binary_op_for_scalar {
     ($trait:ident, $op:ident, $scalar_type:ty) => {
-        impl<D, O, S> $trait<Array<$scalar_type, S, D, O>> for $scalar_type
+        impl<D, O, S> $trait<Array<S, D, O>> for $scalar_type
         where
             D: Dimensionality,
             O: Order,
-            S: StorageMut<$scalar_type> + StorageOwned<$scalar_type>,
+            S: StorageMut<Elem = $scalar_type> + StorageOwned<Elem = $scalar_type>,
         {
-            type Output = Array<$scalar_type, S, D, O>;
+            type Output = Array<S, D, O>;
 
-            fn $op(self, mut rhs: Array<$scalar_type, S, D, O>) -> Self::Output {
+            fn $op(self, mut rhs: Array<S, D, O>) -> Self::Output {
                 for elem in rhs.iter_mut() {
                     *elem = self.$op(elem.clone())
                 }
@@ -324,16 +319,15 @@ macro_rules! impl_binary_op_for_scalar {
             }
         }
 
-        impl<D, O, S> $trait<&Array<$scalar_type, S, D, O>> for $scalar_type
+        impl<D, O, S> $trait<&Array<S, D, O>> for $scalar_type
         where
             D: Dimensionality,
             O: Order,
-            S: Storage<$scalar_type>,
+            S: Storage<Elem = $scalar_type>,
         {
-            type Output =
-                Array<$scalar_type, <S as Storage<$scalar_type>>::Owned<$scalar_type>, D, O>;
+            type Output = Array<<S as Storage>::Owned, D, O>;
 
-            fn $op(self, rhs: &Array<$scalar_type, S, D, O>) -> Self::Output {
+            fn $op(self, rhs: &Array<S, D, O>) -> Self::Output {
                 let mut out = Self::Output::allocate_uninitialized(&rhs.shape);
                 for (dst, src) in out.iter_mut().zip(rhs.iter()) {
                     *dst = self.$op(src.clone())
@@ -392,18 +386,17 @@ impl_binary_op_for_scalar!(Sub, sub, f64);
 
 macro_rules! impl_binary_op_for_scalar_wrapped {
     ($trait:ident, $op:ident, $wrapper:ident) => {
-        impl<D, O, S, T, U> $trait<Array<T, S, D, O>> for $wrapper<U>
+        impl<D, O, S, T> $trait<Array<S, D, O>> for $wrapper<T>
         where
-            Self: $trait<T, Output = T>,
+            Self: $trait<<S as Storage>::Elem, Output = <S as Storage>::Elem>,
             D: Dimensionality,
             O: Order,
-            S: StorageMut<T> + StorageOwned<T>,
-            T: Clone,
-            U: Copy,
+            S: StorageMut + StorageOwned,
+            T: Copy,
         {
-            type Output = Array<T, S, D, O>;
+            type Output = Array<S, D, O>;
 
-            fn $op(self, mut rhs: Array<T, S, D, O>) -> Self::Output {
+            fn $op(self, mut rhs: Array<S, D, O>) -> Self::Output {
                 for elem in rhs.iter_mut() {
                     *elem = self.$op(elem.clone())
                 }
@@ -411,18 +404,17 @@ macro_rules! impl_binary_op_for_scalar_wrapped {
             }
         }
 
-        impl<D, O, S, T, U> $trait<&Array<T, S, D, O>> for $wrapper<U>
+        impl<D, O, S, T> $trait<&Array<S, D, O>> for $wrapper<T>
         where
-            Self: $trait<T, Output = T>,
+            Self: $trait<<S as Storage>::Elem, Output = <S as Storage>::Elem>,
             D: Dimensionality,
             O: Order,
-            S: Storage<T>,
-            T: Clone,
-            U: Copy,
+            S: Storage,
+            T: Copy,
         {
-            type Output = Array<T, <S as Storage<T>>::Owned<T>, D, O>;
+            type Output = Array<<S as Storage>::Owned, D, O>;
 
-            fn $op(self, rhs: &Array<T, S, D, O>) -> Self::Output {
+            fn $op(self, rhs: &Array<S, D, O>) -> Self::Output {
                 let mut out = Self::Output::allocate_uninitialized(&rhs.shape);
                 for (dst, src) in out.iter_mut().zip(rhs.iter()) {
                     *dst = self.$op(src.clone())
@@ -453,17 +445,16 @@ impl_all_binary_op_for_scalar_wrapped!(Wrapping);
 
 macro_rules! impl_binary_assign_op {
     ($trait:ident, $op:ident) => {
-        impl<D, D1, O, S, S1, T, T1> $trait<&Array<T1, S1, D1, O>> for Array<T, S, D, O>
+        impl<D, D1, O, S, S1> $trait<&Array<S1, D1, O>> for Array<S, D, O>
         where
             D: Dimensionality + DimensionalityMax<D1>,
             D1: Dimensionality,
             O: Order,
-            S: StorageMut<T>,
-            S1: Storage<T1>,
-            T: $trait<T1> + Clone,
-            T1: Clone,
+            S: StorageMut,
+            <S as Storage>::Elem: $trait<<S1 as Storage>::Elem> + Clone,
+            S1: Storage,
         {
-            fn $op(&mut self, rhs: &Array<T1, S1, D1, O>) {
+            fn $op(&mut self, rhs: &Array<S1, D1, O>) {
                 if self.shape.as_ref() == rhs.shape.as_ref() {
                     for (dst, src) in self.iter_mut().zip(rhs.iter()) {
                         dst.$op(src.clone());
@@ -504,15 +495,15 @@ impl_binary_assign_op!(SubAssign, sub_assign);
 
 macro_rules! impl_binary_assign_op_with_scalar {
     ($trait:ident, $op:ident) => {
-        impl<D, O, S, T, U> $trait<U> for Array<T, S, D, O>
+        impl<D, O, S, T> $trait<T> for Array<S, D, O>
         where
             D: Dimensionality,
             O: Order,
-            S: StorageMut<T>,
-            T: $trait<U> + Clone,
-            U: Scalar,
+            S: StorageMut,
+            <S as Storage>::Elem: $trait<T>,
+            T: Scalar,
         {
-            fn $op(&mut self, rhs: U) {
+            fn $op(&mut self, rhs: T) {
                 for elem in self.iter_mut() {
                     elem.$op(rhs)
                 }
@@ -543,7 +534,7 @@ mod tests {
     fn unary_ops() {
         let a3 = (0_isize..)
             .take(24)
-            .collect::<Array<_, _, _>>()
+            .collect::<Array<_, _>>()
             .into_shape(vec![2, 3, 4])
             .unwrap();
         {
@@ -568,13 +559,13 @@ mod tests {
     fn binary_ops() {
         let a3_ = (10_usize..)
             .take(24)
-            .collect::<Array<_, _, _>>()
+            .collect::<Array<_, _>>()
             .into_shape(vec![2, 3, 4])
             .unwrap();
         let a3 = a3_.slice(crate::s!(.., .., 2..));
         let b3_ = (0_usize..)
             .take(24)
-            .collect::<Array<_, _, _>>()
+            .collect::<Array<_, _>>()
             .into_shape(vec![2, 3, 4])
             .unwrap();
         let b3 = b3_.slice(crate::s!(.., .., 2..));
@@ -664,13 +655,13 @@ mod tests {
     fn binary_assign_ops() {
         let a3_ = (10_usize..)
             .take(24)
-            .collect::<Array<_, _, _>>()
+            .collect::<Array<_, _>>()
             .into_shape(vec![2, 3, 4])
             .unwrap();
         let a3 = a3_.slice(crate::s!(.., .., 2..));
         let b3_ = (0_usize..)
             .take(24)
-            .collect::<Array<_, _, _>>()
+            .collect::<Array<_, _>>()
             .into_shape(vec![2, 3, 4])
             .unwrap();
         let b3 = b3_.slice(crate::s!(.., .., 2..));

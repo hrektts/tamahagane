@@ -31,8 +31,8 @@ impl FormatOption {
     }
 }
 
-fn format_array<T, S, D, O, F>(
-    array: &Array<T, S, D, O>,
+fn format_array<S, D, O, F>(
+    array: &Array<S, D, O>,
     indent: usize,
     option: &FormatOption,
     f: &mut fmt::Formatter<'_>,
@@ -40,10 +40,9 @@ fn format_array<T, S, D, O, F>(
 ) -> fmt::Result
 where
     D: Dimensionality,
-    F: Clone + FnMut(&T, &mut fmt::Formatter<'_>) -> fmt::Result,
+    F: Clone + FnMut(&<S as Storage>::Elem, &mut fmt::Formatter<'_>) -> fmt::Result,
     O: Order,
-    S: Storage<T>,
-    T: Clone,
+    S: Storage,
 {
     if array.is_empty() {
         let n = array.n_dims();
@@ -116,11 +115,11 @@ fn fmt_indent(i: usize, n_dims: usize, indent: usize, f: &mut fmt::Formatter<'_>
     Ok(())
 }
 
-impl<D, S, T> fmt::Binary for Array<T, S, D>
+impl<D, S> fmt::Binary for Array<S, D>
 where
     D: Dimensionality,
-    S: Storage<T>,
-    T: Clone + fmt::Binary,
+    S: Storage,
+    <S as Storage>::Elem: fmt::Binary,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let option = FormatOption::new(self.len(), f.alternate());
@@ -129,12 +128,12 @@ where
     }
 }
 
-impl<D, O, S, T> fmt::Debug for Array<T, S, D, O>
+impl<D, O, S> fmt::Debug for Array<S, D, O>
 where
     D: Dimensionality,
     O: Order,
-    S: Storage<T>,
-    T: Clone + fmt::Debug,
+    S: Storage,
+    <S as Storage>::Elem: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let option = FormatOption::new(self.len(), f.alternate());
@@ -150,11 +149,11 @@ where
     }
 }
 
-impl<D, S, T> fmt::Display for Array<T, S, D>
+impl<D, S> fmt::Display for Array<S, D>
 where
     D: Dimensionality,
-    S: Storage<T>,
-    T: Clone + fmt::Display,
+    S: Storage,
+    <S as Storage>::Elem: fmt::Display,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let option = FormatOption::new(self.len(), f.alternate());
@@ -163,11 +162,11 @@ where
     }
 }
 
-impl<D, S, T> fmt::LowerExp for Array<T, S, D>
+impl<D, S> fmt::LowerExp for Array<S, D>
 where
     D: Dimensionality,
-    S: Storage<T>,
-    T: Clone + fmt::LowerExp,
+    S: Storage,
+    <S as Storage>::Elem: fmt::LowerExp,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let option = FormatOption::new(self.len(), f.alternate());
@@ -176,11 +175,11 @@ where
     }
 }
 
-impl<D, S, T> fmt::LowerHex for Array<T, S, D>
+impl<D, S> fmt::LowerHex for Array<S, D>
 where
     D: Dimensionality,
-    S: Storage<T>,
-    T: Clone + fmt::LowerHex,
+    S: Storage,
+    <S as Storage>::Elem: fmt::LowerHex,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let option = FormatOption::new(self.len(), f.alternate());
@@ -189,11 +188,11 @@ where
     }
 }
 
-impl<D, S, T> fmt::Octal for Array<T, S, D>
+impl<D, S> fmt::Octal for Array<S, D>
 where
     D: Dimensionality,
-    S: Storage<T>,
-    T: Clone + fmt::Octal,
+    S: Storage,
+    <S as Storage>::Elem: fmt::Octal,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let option = FormatOption::new(self.len(), f.alternate());
@@ -202,11 +201,11 @@ where
     }
 }
 
-impl<D, S, T> fmt::Pointer for Array<T, S, D>
+impl<D, S> fmt::Pointer for Array<S, D>
 where
     D: Dimensionality,
-    S: Storage<T>,
-    T: Clone + fmt::Pointer,
+    S: Storage,
+    <S as Storage>::Elem: fmt::Pointer,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let option = FormatOption::new(self.len(), f.alternate());
@@ -215,11 +214,11 @@ where
     }
 }
 
-impl<D, S, T> fmt::UpperExp for Array<T, S, D>
+impl<D, S> fmt::UpperExp for Array<S, D>
 where
     D: Dimensionality,
-    S: Storage<T>,
-    T: Clone + fmt::UpperExp,
+    S: Storage,
+    <S as Storage>::Elem: fmt::UpperExp,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let option = FormatOption::new(self.len(), f.alternate());
@@ -228,11 +227,11 @@ where
     }
 }
 
-impl<D, S, T> fmt::UpperHex for Array<T, S, D>
+impl<D, S> fmt::UpperHex for Array<S, D>
 where
     D: Dimensionality,
-    S: Storage<T>,
-    T: Clone + fmt::UpperHex,
+    S: Storage,
+    <S as Storage>::Elem: fmt::UpperHex,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let option = FormatOption::new(self.len(), f.alternate());

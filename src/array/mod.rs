@@ -19,22 +19,18 @@ use crate::{
 };
 
 #[derive(Clone, Hash, Eq, PartialEq)]
-pub struct Array<T, S, D, O = RowMajor>
+pub struct Array<S, D, O = RowMajor>
 where
     D: Dimensionality,
-    T: Clone,
 {
     shape: <D as Dimensionality>::Shape,
     strides: <<D as Dimensionality>::Shape as Shape>::Strides,
     storage: S,
     offset: usize,
-    phantom: PhantomData<(T, O)>,
+    phantom: PhantomData<O>,
 }
 
-impl<T> From<Vec<T>> for Array<T, StorageImpl<Vec<T>>, NDims<1>>
-where
-    T: Clone,
-{
+impl<T> From<Vec<T>> for Array<StorageImpl<Vec<T>>, NDims<1>> {
     fn from(data: Vec<T>) -> Self {
         Self {
             shape: [data.len()],
@@ -46,7 +42,7 @@ where
     }
 }
 
-impl<T> FromIterator<T> for Array<T, StorageImpl<Vec<T>>, NDims<1>>
+impl<T> FromIterator<T> for Array<StorageImpl<Vec<T>>, NDims<1>>
 where
     T: Clone,
 {
@@ -62,18 +58,17 @@ where
     }
 }
 
-impl<D, O, S, T> NDArray<T, S, D, O> for Array<T, S, D, O>
+impl<D, O, S> NDArray<S, D, O> for Array<S, D, O>
 where
     D: Dimensionality,
     O: Order,
-    S: Storage<T>,
-    T: Clone,
+    S: Storage,
 {
     #[allow(clippy::type_complexity)]
     fn broadcast_to<BD>(
         &self,
         shape: &<BD as Dimensionality>::Shape,
-    ) -> Result<Array<T, <S as Storage<T>>::View<'_, T>, BD, O>>
+    ) -> Result<Array<<S as Storage>::View<'_>, BD, O>>
     where
         BD: Dimensionality,
     {
@@ -99,7 +94,7 @@ where
     }
 
     #[inline]
-    fn iter(&self) -> Iter<'_, T, D> {
+    fn iter(&self) -> Iter<'_, <S as Storage>::Elem, D> {
         Iter::new(self)
     }
 
@@ -117,7 +112,7 @@ where
     fn permute(
         &self,
         axes: <D as Dimensionality>::Shape,
-    ) -> Result<Array<T, <S as Storage<T>>::View<'_, T>, D, O>> {
+    ) -> Result<Array<<S as Storage>::View<'_>, D, O>> {
         if axes.n_dims() != self.n_dims() {
             return Err(ShapeError::IncompatibleAxis("axes do not match array".into()).into());
         }
@@ -161,7 +156,7 @@ where
     fn slice<ST, SD>(
         &self,
         info: SliceInfo<ST, SD>,
-    ) -> Array<T, <S as Storage<T>>::View<'_, T>, <D as DimensionalityAdd<SD>>::Output, O>
+    ) -> Array<<S as Storage>::View<'_>, <D as DimensionalityAdd<SD>>::Output, O>
     where
         D: DimensionalityAdd<SD>,
         SD: DimensionalityDiff,
@@ -187,7 +182,7 @@ where
         &self.strides
     }
 
-    fn to_owned_array(&self) -> Array<T, <S as Storage<T>>::Owned<T>, D, O> {
+    fn to_owned_array(&self) -> Array<<S as Storage>::Owned, D, O> {
         Array {
             shape: self.shape.clone(),
             strides: self.shape.to_default_strides::<O>(),
@@ -201,7 +196,7 @@ where
     fn to_shape<NS>(
         &self,
         shape: NS,
-    ) -> Result<Array<T, <S as Storage<T>>::Cow<'_, T>, <NS as NewShape>::Dimensionality, O>>
+    ) -> Result<Array<<S as Storage>::Cow<'_>, <NS as NewShape>::Dimensionality, O>>
     where
         NS: NewShape,
     {
@@ -212,7 +207,7 @@ where
     fn to_shape_with_order<NS, NO>(
         &self,
         shape: NS,
-    ) -> Result<Array<T, <S as Storage<T>>::Cow<'_, T>, <NS as NewShape>::Dimensionality, NO>>
+    ) -> Result<Array<<S as Storage>::Cow<'_>, <NS as NewShape>::Dimensionality, NO>>
     where
         NS: NewShape,
         NO: Order,
@@ -256,7 +251,7 @@ where
         }
     }
 
-    fn transpose(&self) -> Array<T, <S as Storage<T>>::View<'_, T>, D, O> {
+    fn transpose(&self) -> Array<<S as Storage>::View<'_>, D, O> {
         let mut shape = self.shape.clone();
         shape.as_mut().reverse();
         let mut strides = self.strides.clone();
@@ -272,28 +267,27 @@ where
     }
 }
 
-impl<D, O, S, T> NDArrayMut<T, S, D, O> for Array<T, S, D, O>
+impl<D, O, S> NDArrayMut<S, D, O> for Array<S, D, O>
 where
     D: Dimensionality,
     O: Order,
-    S: StorageMut<T>,
-    T: Clone,
+    S: StorageMut,
 {
-    fn fill(&mut self, value: T) {
+    fn fill(&mut self, value: <S as Storage>::Elem) {
         for elem in self.iter_mut() {
             *elem = value.clone();
         }
     }
 
     #[inline]
-    fn iter_mut(&mut self) -> IterMut<'_, T, D> {
+    fn iter_mut(&mut self) -> IterMut<'_, <S as Storage>::Elem, D> {
         IterMut::new(self)
     }
 
     fn slice_mut<ST, SD>(
         &mut self,
         info: SliceInfo<ST, SD>,
-    ) -> Array<T, <S as StorageMut<T>>::ViewMut<'_, T>, <D as DimensionalityAdd<SD>>::Output, O>
+    ) -> Array<<S as StorageMut>::ViewMut<'_>, <D as DimensionalityAdd<SD>>::Output, O>
     where
         D: DimensionalityAdd<SD>,
         SD: DimensionalityDiff,
@@ -310,12 +304,11 @@ where
     }
 }
 
-impl<D, O, S, T> NDArrayOwned<T, S, D, O> for Array<T, S, D, O>
+impl<D, O, S> NDArrayOwned<S, D, O> for Array<S, D, O>
 where
     D: Dimensionality,
     O: Order,
-    S: StorageOwned<T>,
-    T: Clone,
+    S: StorageOwned,
 {
     fn allocate_uninitialized(shape: &<D as Dimensionality>::Shape) -> Self {
         Array {
@@ -327,7 +320,7 @@ where
         }
     }
 
-    fn into_shape<NS>(self, shape: NS) -> Result<Array<T, S, <NS as NewShape>::Dimensionality, O>>
+    fn into_shape<NS>(self, shape: NS) -> Result<Array<S, <NS as NewShape>::Dimensionality, O>>
     where
         NS: NewShape,
     {
@@ -337,7 +330,7 @@ where
     fn into_shape_with_order<NS, NO>(
         self,
         shape: NS,
-    ) -> Result<Array<T, S, <NS as NewShape>::Dimensionality, NO>>
+    ) -> Result<Array<S, <NS as NewShape>::Dimensionality, NO>>
     where
         NS: NewShape,
         NO: Order,
@@ -383,7 +376,7 @@ where
 
     fn ones(shape: &<D as Dimensionality>::Shape) -> Self
     where
-        T: One,
+        <S as Storage>::Elem: One,
     {
         Array {
             shape: shape.clone(),
@@ -396,7 +389,7 @@ where
 
     fn zeros(shape: &<D as Dimensionality>::Shape) -> Self
     where
-        T: Zero,
+        <S as Storage>::Elem: Zero,
     {
         Array {
             shape: shape.clone(),
@@ -408,12 +401,11 @@ where
     }
 }
 
-impl<D, O, S, T> Array<T, S, D, O>
+impl<D, O, S> Array<S, D, O>
 where
     D: Dimensionality,
     O: Order,
-    S: Storage<T>,
-    T: Clone,
+    S: Storage,
 {
     fn convert_shape<NS>(
         &self,
@@ -467,10 +459,9 @@ where
     where
         D: Dimensionality + DimensionalityAdd<SD>,
         <D as DimensionalityAdd<SD>>::Output: Dimensionality,
-        S: Storage<T>,
+        S: Storage,
         SD: DimensionalityDiff,
         ST: AsRef<[ArrayIndex]>,
-        T: Clone,
     {
         let out_n_dims = {
             let n_dims = self.n_dims();
@@ -688,7 +679,7 @@ mod tests {
     #[test]
     fn allocate_uninitialized() {
         let shape = [2, 3, 4];
-        let a3 = Array::<f64, StorageImpl<Vec<_>>, NDims<3>>::allocate_uninitialized(&shape);
+        let a3 = Array::<StorageImpl<Vec<f64>>, NDims<3>>::allocate_uninitialized(&shape);
 
         assert_eq!(a3.shape(), &shape);
     }
@@ -698,7 +689,7 @@ mod tests {
     fn broadcast_to_smaller_dimensions() {
         let a3 = (1..)
             .take(6)
-            .collect::<Array<_, _, _>>()
+            .collect::<Array<_, _>>()
             .into_shape([1, 2, 3])
             .unwrap();
         a3.broadcast_to::<NDims<2>>(&[2, 3]).unwrap();
@@ -709,7 +700,7 @@ mod tests {
     fn broadcast_to_invalid_shape() {
         let a3 = (1..)
             .take(6)
-            .collect::<Array<_, _, _>>()
+            .collect::<Array<_, _>>()
             .into_shape([1, 2, 3])
             .unwrap();
         a3.broadcast_to::<NDims<3>>(&[2, 3, 3]).unwrap();
@@ -802,7 +793,7 @@ mod tests {
 
     #[test]
     fn convert_to_new_shape() -> Result<()> {
-        let a1 = (1..).take(24).collect::<Array<_, _, _>>();
+        let a1 = (1..).take(24).collect::<Array<_, _>>();
         {
             let new_shape = [2_isize, 3, 4];
             let shape = new_shape.map(|x| x as usize);
@@ -830,7 +821,7 @@ mod tests {
     #[test]
     fn convert_into_new_shape() -> Result<()> {
         {
-            let a1 = (1..).take(24).collect::<Array<_, _, _>>();
+            let a1 = (1..).take(24).collect::<Array<_, _>>();
             let ptr = a1.storage.as_ptr();
             let new_shape = [2_isize, 3, 4];
             let shape = new_shape.map(|x| x as usize);
@@ -842,7 +833,7 @@ mod tests {
             assert_eq!(a2.offset, 0);
         }
         {
-            let a1 = (1..).take(24).collect::<Array<_, _, _>>();
+            let a1 = (1..).take(24).collect::<Array<_, _>>();
             let ptr = a1.storage.as_ptr();
             let new_shape = [2_isize, 3, 4];
             let shape = new_shape.map(|x| x as usize);
@@ -889,7 +880,7 @@ mod tests {
     fn fill() -> Result<()> {
         let mut a3 = (1..)
             .take(24)
-            .collect::<Array<_, _, _>>()
+            .collect::<Array<_, _>>()
             .into_shape([2, 3, 4])?;
         a3.fill(7);
 
@@ -912,10 +903,7 @@ mod tests {
     #[test]
     fn len() -> Result<()> {
         let shape = [2_isize, 3, 4];
-        let a3 = (1..)
-            .take(24)
-            .collect::<Array<_, _, _>>()
-            .into_shape(shape)?;
+        let a3 = (1..).take(24).collect::<Array<_, _>>().into_shape(shape)?;
 
         assert_eq!(a3.len(), shape.iter().map(|&x| x as usize).product());
 
@@ -925,10 +913,7 @@ mod tests {
     #[test]
     fn n_dims() -> Result<()> {
         let shape = [2_isize, 3, 4];
-        let a3 = (1..)
-            .take(24)
-            .collect::<Array<_, _, _>>()
-            .into_shape(shape)?;
+        let a3 = (1..).take(24).collect::<Array<_, _>>().into_shape(shape)?;
 
         assert_eq!(a3.n_dims(), shape.len());
 
@@ -938,7 +923,7 @@ mod tests {
     #[test]
     fn ones() {
         let shape = [2, 3, 4];
-        let a3 = Array::<u64, StorageImpl<Vec<_>>, NDims<3>>::ones(&shape);
+        let a3 = Array::<StorageImpl<Vec<u64>>, NDims<3>>::ones(&shape);
 
         assert_eq!(a3.shape(), &shape);
         assert!(a3.iter().all(|&x| x == 1));
@@ -980,10 +965,7 @@ mod tests {
     #[test]
     fn shape() -> Result<()> {
         let shape = [2_isize, 3, 4];
-        let a3 = (1..)
-            .take(24)
-            .collect::<Array<_, _, _>>()
-            .into_shape(shape)?;
+        let a3 = (1..).take(24).collect::<Array<_, _>>().into_shape(shape)?;
 
         assert_eq!(a3.shape(), &shape.map(|x| x as usize));
 
@@ -1087,10 +1069,7 @@ mod tests {
     #[test]
     fn strides() -> Result<()> {
         let shape = [2_isize, 3, 4];
-        let a3 = (1..)
-            .take(24)
-            .collect::<Array<_, _, _>>()
-            .into_shape(shape)?;
+        let a3 = (1..).take(24).collect::<Array<_, _>>().into_shape(shape)?;
 
         assert_eq!(
             a3.strides(),
@@ -1102,10 +1081,7 @@ mod tests {
 
     #[test]
     fn transpose() -> Result<()> {
-        let a2 = (1..)
-            .take(6)
-            .collect::<Array<_, _, _>>()
-            .into_shape([2, 3])?;
+        let a2 = (1..).take(6).collect::<Array<_, _>>().into_shape([2, 3])?;
         let a2t = a2.transpose();
 
         assert_eq!(a2t.shape(), &[3, 2]);
@@ -1119,7 +1095,7 @@ mod tests {
     #[test]
     fn zeros() {
         let shape = [2, 3, 4];
-        let a3 = Array::<u64, StorageImpl<Vec<_>>, NDims<3>>::zeros(&shape);
+        let a3 = Array::<StorageImpl<Vec<u64>>, NDims<3>>::zeros(&shape);
 
         assert_eq!(a3.shape(), &shape);
         assert!(a3.iter().all(|&x| x == 0));
