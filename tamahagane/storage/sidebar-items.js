@@ -1,0 +1,1 @@
+initSidebarItems({"struct":[["StorageImpl",""]],"trait":[["Storage",""],["StorageMut",""],["StorageOwned",""]]});
