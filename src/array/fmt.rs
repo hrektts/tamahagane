@@ -245,7 +245,7 @@ mod tests {
     #[cfg(not(feature = "std"))]
     use alloc::{vec, vec::Vec};
 
-    use crate::{dyn_s, Array, NDArray, NDArrayOwned, Result};
+    use crate::{s, Array, NDArray, NDArrayOwned, Result};
 
     #[test]
     fn format_empty_arrays() -> Result<()> {
@@ -263,7 +263,7 @@ mod tests {
     #[test]
     fn format_0d_array() {
         let a1 = Array::from(vec![1_usize]);
-        let a0 = a1.slice(dyn_s!(0));
+        let a0 = a1.slice(s!(0));
 
         assert_eq!(format!("{}", a0), "1");
     }
