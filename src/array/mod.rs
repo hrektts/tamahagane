@@ -1,7 +1,10 @@
 mod fmt;
 
 mod iter;
+use iter::SequenceIter;
 pub use iter::{Iter, IterMut};
+
+mod linarg;
 
 mod ops;
 pub use ops::Scalar;
@@ -661,6 +664,11 @@ where
         }
 
         Ok(inferred)
+    }
+
+    #[inline]
+    fn iter_sequence(&self, axis: usize) -> SequenceIter<'_, <S as Storage>::Elem, D> {
+        SequenceIter::new(self, axis)
     }
 }
 

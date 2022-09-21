@@ -1,5 +1,5 @@
 mod ops;
-pub use ops::{DimensionalityAdd, DimensionalityMax};
+pub use ops::{DimensionalityAdd, DimensionalityAfterDot, DimensionalityMax};
 
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
