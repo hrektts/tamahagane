@@ -16,6 +16,7 @@ pub trait Storage {
     type Elem: Clone;
     type Cow<'a>: FromIterator<<Self as Storage>::Elem> + StorageMut<Elem = <Self as Storage>::Elem>
     where
+        Self: 'a,
         <Self as Storage>::Elem: 'a,
     = StorageImpl<Cow<'a, [<Self as Storage>::Elem]>>;
     type Owned: FromIterator<<Self as Storage>::Elem>
@@ -25,6 +26,7 @@ pub trait Storage {
         StorageImpl<Arc<Vec<<Self as Storage>::Elem>>>;
     type View<'a>: Storage<Elem = <Self as Storage>::Elem>
     where
+        Self: 'a,
         <Self as Storage>::Elem: 'a,
     = StorageImpl<&'a [<Self as Storage>::Elem]>;
     fn as_ptr(&self) -> *const <Self as Storage>::Elem;
@@ -37,6 +39,7 @@ pub trait StorageMut: Storage {
     type ViewMut<'a>: Storage<Elem = <Self as Storage>::Elem>
         + StorageMut<Elem = <Self as Storage>::Elem>
     where
+        Self: 'a,
         <Self as Storage>::Elem: 'a,
     = StorageImpl<&'a mut [<Self as Storage>::Elem]>;
     fn as_mut_ptr(&mut self) -> *mut <Self as Storage>::Elem;

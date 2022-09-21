@@ -1,10 +1,14 @@
+#![allow(incomplete_features)]
 #![feature(
     associated_type_defaults,
     const_option,
     const_trait_impl,
+    core_intrinsics,
     exact_size_is_empty,
-    generic_associated_types,
-    generic_const_exprs
+    generic_arg_infer,
+    generic_const_exprs,
+    pointer_byte_offsets,
+    unchecked_math
 )]
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -20,12 +24,15 @@ pub use array_index::{ArrayIndex, NewAxis};
 
 mod dimension;
 pub use dimension::{
-    DimDiff, Dimensionality, DimensionalityAdd, DimensionalityDiff, DimensionalityMax, DynDim,
-    DynDimDiff, NDims,
+    DimDiff, Dimensionality, DimensionalityAdd, DimensionalityAfterDot, DimensionalityDiff,
+    DimensionalityMax, DynDim, DynDimDiff, NDims,
 };
 
 mod error;
 pub use error::{Error, Result, ShapeError};
+
+mod linalg;
+pub use linalg::Dot;
 
 mod order;
 pub use order::{ColumnMajor, Order, RowMajor};
