@@ -86,7 +86,7 @@ impl Order for RowMajor {
             .rev()
             .zip(strides[..len - 1].iter().rev())
         {
-            if stride != stride_expected as isize {
+            if stride != stride_expected {
                 return false;
             }
             stride_expected *= dim as isize;
@@ -151,7 +151,7 @@ impl Order for ColumnMajor {
 
         let mut stride_expected = shape[0] as isize * strides[0];
         for (&dim, &stride) in shape[1..].iter().zip(strides[1..].iter()) {
-            if stride != stride_expected as isize {
+            if stride != stride_expected {
                 return false;
             }
             stride_expected *= dim as isize;

@@ -427,7 +427,7 @@ where
         let mut out_shape =
             <<NS as NewShape>::Dimensionality as Dimensionality>::shape_zeroed(shape.n_dims());
         for (dest, src) in out_shape.as_mut().iter_mut().zip(self.shape.as_ref()) {
-            *dest = *src as usize;
+            *dest = *src;
         }
         out_shape
     }
