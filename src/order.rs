@@ -1,9 +1,9 @@
 use crate::{Dimensionality, Shape};
 
 pub trait Order: 'static {
-    fn convert_shape_to_strides<S>(shape: &S, base_stride: isize, strides: &mut S::Strides)
+    fn convert_shape_to_strides<Sh>(shape: &Sh, base_stride: isize, strides: &mut Sh::Strides)
     where
-        S: Shape;
+        Sh: Shape;
     fn name<'a>() -> &'a str;
     fn is_data_contiguous<D>(
         shape: &<D as Dimensionality>::Shape,
@@ -13,11 +13,11 @@ pub trait Order: 'static {
         D: Dimensionality;
     fn is_data_aligned_monotonically(shape: &[usize], strides: &[isize]) -> bool;
 
-    fn convert_shape_to_default_strides<S>(shape: &S, strides: &mut S::Strides)
+    fn convert_shape_to_default_strides<Sh>(shape: &Sh, strides: &mut Sh::Strides)
     where
-        S: Shape,
+        Sh: Shape,
     {
-        Self::convert_shape_to_strides::<S>(shape, 1, strides)
+        Self::convert_shape_to_strides::<Sh>(shape, 1, strides)
     }
 }
 
