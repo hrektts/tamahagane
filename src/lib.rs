@@ -131,7 +131,9 @@ where
     O: Order,
     S: StorageOwned,
 {
-    fn allocate_uninitialized(shape: &<D as Dimensionality>::Shape) -> Self;
+    fn allocate_uninitialized<Sh>(shape: &Sh) -> Self
+    where
+        Sh: Shape<Dimensionality = D>;
     fn into_shape<NS>(self, shape: NS) -> Result<Array<S, <NS as NewShape>::Dimensionality, O>>
     where
         NS: NewShape;
@@ -142,10 +144,12 @@ where
     where
         NS: NewShape,
         NO: Order;
-    fn ones(shape: &<D as Dimensionality>::Shape) -> Self
+    fn ones<Sh>(shape: &Sh) -> Self
     where
-        <S as Storage>::Elem: One;
-    fn zeros(shape: &<D as Dimensionality>::Shape) -> Self
+        <S as Storage>::Elem: One,
+        Sh: Shape<Dimensionality = D>;
+    fn zeros<Sh>(shape: &Sh) -> Self
     where
-        <S as Storage>::Elem: Zero;
+        <S as Storage>::Elem: Zero,
+        Sh: Shape<Dimensionality = D>;
 }

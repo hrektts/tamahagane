@@ -61,6 +61,7 @@ macro_rules! impl_unary_op {
         impl<D, O, S> $trait for &Array<S, D, O>
         where
             D: Dimensionality,
+            <D as Dimensionality>::Shape: Shape<Dimensionality = D>,
             O: Order,
             S: Storage,
             <S as Storage>::Elem: $trait<Output = <S as Storage>::Elem>,
@@ -102,6 +103,8 @@ macro_rules! impl_binary_op {
         impl<D, D1, O, S, S1> $trait<Array<S1, D1, O>> for Array<S, D, O>
         where
             D: Dimensionality + DimensionalityMax<D1>,
+            <<D as DimensionalityMax<D1>>::Output as Dimensionality>::Shape:
+                Shape<Dimensionality = <D as DimensionalityMax<D1>>::Output>,
             D1: Dimensionality,
             O: Order,
             S: StorageMut + StorageOwned,
@@ -118,6 +121,8 @@ macro_rules! impl_binary_op {
         impl<D, D1, O, S, S1> $trait<&Array<S1, D1, O>> for Array<S, D, O>
         where
             D: Dimensionality + DimensionalityMax<D1>,
+            <<D as DimensionalityMax<D1>>::Output as Dimensionality>::Shape:
+                Shape<Dimensionality = <D as DimensionalityMax<D1>>::Output>,
             D1: Dimensionality,
             O: Order,
             S: StorageMut + StorageOwned,
@@ -169,6 +174,8 @@ macro_rules! impl_binary_op {
         where
             D: Dimensionality,
             D1: Dimensionality + DimensionalityMax<D>,
+            <<D1 as DimensionalityMax<D>>::Output as Dimensionality>::Shape:
+                Shape<Dimensionality = <D1 as DimensionalityMax<D>>::Output>,
             O: Order,
             S: Storage,
             <S as Storage>::Elem: $trait<<S1 as Storage>::Elem, Output = <S1 as Storage>::Elem>,
@@ -218,6 +225,8 @@ macro_rules! impl_binary_op {
         impl<D, D1, O, S, S1> $trait<&Array<S1, D1, O>> for &Array<S, D, O>
         where
             D: Dimensionality + DimensionalityMax<D1>,
+            <<D as DimensionalityMax<D1>>::Output as Dimensionality>::Shape:
+                Shape<Dimensionality = <D as DimensionalityMax<D1>>::Output>,
             D1: Dimensionality,
             O: Order,
             S: Storage,
@@ -272,6 +281,7 @@ macro_rules! impl_binary_op_with_scalar {
         impl<D, O, S, T> $trait<T> for &Array<S, D, O>
         where
             D: Dimensionality,
+            <D as Dimensionality>::Shape: Shape<Dimensionality = D>,
             O: Order,
             S: Storage,
             <S as Storage>::Elem: $trait<T, Output = <S as Storage>::Elem>,
@@ -322,6 +332,7 @@ macro_rules! impl_binary_op_for_scalar {
         impl<D, O, S> $trait<&Array<S, D, O>> for $scalar_type
         where
             D: Dimensionality,
+            <D as Dimensionality>::Shape: Shape<Dimensionality = D>,
             O: Order,
             S: Storage<Elem = $scalar_type>,
         {
@@ -408,6 +419,7 @@ macro_rules! impl_binary_op_for_scalar_wrapped {
         where
             Self: $trait<<S as Storage>::Elem, Output = <S as Storage>::Elem>,
             D: Dimensionality,
+            <D as Dimensionality>::Shape: Shape<Dimensionality = D>,
             O: Order,
             S: Storage,
             T: Copy,

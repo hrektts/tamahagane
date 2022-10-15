@@ -313,11 +313,14 @@ where
     O: Order,
     S: StorageOwned,
 {
-    fn allocate_uninitialized(shape: &<D as Dimensionality>::Shape) -> Self {
+    fn allocate_uninitialized<Sh>(shape: &Sh) -> Self
+    where
+        Sh: Shape<Dimensionality = D>,
+    {
         Array {
-            shape: shape.clone(),
-            strides: shape.to_default_strides::<O>(),
-            storage: S::allocate_uninitialized(shape.array_len()),
+            shape: shape.as_associated_shape().clone(),
+            strides: shape.as_associated_shape().to_default_strides::<O>(),
+            storage: S::allocate_uninitialized(shape.as_associated_shape().array_len()),
             offset: 0,
             phantom: PhantomData,
         }
@@ -377,27 +380,29 @@ where
         }
     }
 
-    fn ones(shape: &<D as Dimensionality>::Shape) -> Self
+    fn ones<Sh>(shape: &Sh) -> Self
     where
         <S as Storage>::Elem: One,
+        Sh: Shape<Dimensionality = D>,
     {
         Array {
-            shape: shape.clone(),
-            strides: shape.to_default_strides::<O>(),
-            storage: S::ones(shape.array_len()),
+            shape: shape.as_associated_shape().clone(),
+            strides: shape.as_associated_shape().to_default_strides::<O>(),
+            storage: S::ones(shape.as_associated_shape().array_len()),
             offset: 0,
             phantom: PhantomData,
         }
     }
 
-    fn zeros(shape: &<D as Dimensionality>::Shape) -> Self
+    fn zeros<Sh>(shape: &Sh) -> Self
     where
         <S as Storage>::Elem: Zero,
+        Sh: Shape<Dimensionality = D>,
     {
         Array {
-            shape: shape.clone(),
-            strides: shape.to_default_strides::<O>(),
-            storage: S::zeros(shape.array_len()),
+            shape: shape.as_associated_shape().clone(),
+            strides: shape.as_associated_shape().to_default_strides::<O>(),
+            storage: S::zeros(shape.as_associated_shape().array_len()),
             offset: 0,
             phantom: PhantomData,
         }
@@ -422,7 +427,7 @@ where
         let mut out_shape =
             <<NS as NewShape>::Dimensionality as Dimensionality>::shape_zeroed(shape.n_dims());
         for (dest, src) in out_shape.as_mut().iter_mut().zip(self.shape.as_ref()) {
-            *dest = *src as usize;
+            *dest = *src;
         }
         out_shape
     }
@@ -687,7 +692,7 @@ mod tests {
     #[test]
     fn allocate_uninitialized() {
         let shape = [2, 3, 4];
-        let a3 = Array::<StorageImpl<Vec<f64>>, NDims<3>>::allocate_uninitialized(&shape);
+        let a3 = Array::<StorageImpl<Vec<f64>>, _>::allocate_uninitialized(&shape);
 
         assert_eq!(a3.shape(), &shape);
     }
@@ -931,7 +936,7 @@ mod tests {
     #[test]
     fn ones() {
         let shape = [2, 3, 4];
-        let a3 = Array::<StorageImpl<Vec<u64>>, NDims<3>>::ones(&shape);
+        let a3 = Array::<StorageImpl<Vec<u64>>, _>::ones(&shape);
 
         assert_eq!(a3.shape(), &shape);
         assert!(a3.iter().all(|&x| x == 1));
@@ -1103,7 +1108,7 @@ mod tests {
     #[test]
     fn zeros() {
         let shape = [2, 3, 4];
-        let a3 = Array::<StorageImpl<Vec<u64>>, NDims<3>>::zeros(&shape);
+        let a3 = Array::<StorageImpl<Vec<u64>>, _>::zeros(&shape);
 
         assert_eq!(a3.shape(), &shape);
         assert!(a3.iter().all(|&x| x == 0));

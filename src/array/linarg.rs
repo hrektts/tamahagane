@@ -2,12 +2,14 @@ use core::ops::{AddAssign, Mul};
 
 use crate::{
     storage::Storage, Array, Dimensionality, DimensionalityAfterDot, Dot, NDArray, NDArrayMut,
-    NDArrayOwned, Order,
+    NDArrayOwned, Order, Shape,
 };
 
 impl<'a, 'b, D, D1, O, S, S1> Dot<'a, &'b Array<S1, D1, O>> for Array<S, D, O>
 where
     D: Dimensionality + DimensionalityAfterDot<D1>,
+    <<D as DimensionalityAfterDot<D1>>::Output as Dimensionality>::Shape:
+        Shape<Dimensionality = <D as DimensionalityAfterDot<D1>>::Output>,
     D1: Dimensionality,
     O: Order,
     S: Storage,
@@ -77,7 +79,7 @@ mod tests {
     #[cfg(not(feature = "std"))]
     use alloc::{vec, vec::Vec};
 
-    use crate::{s, storage::StorageImpl, Array, Dot, NDArray, NDArrayOwned, NDims};
+    use crate::{s, storage::StorageImpl, Array, Dot, NDArray, NDArrayOwned};
 
     #[test]
     fn dot_2d() {
@@ -132,7 +134,7 @@ mod tests {
 
     #[test]
     fn dot_of_zeros() {
-        let a = Array::<StorageImpl<Vec<usize>>, NDims<_>>::zeros(&[3, 3]);
+        let a = Array::<StorageImpl<Vec<usize>>, _>::zeros(&[3, 3]);
 
         assert!(a.dot(&a).iter().all(|&x| x == 0));
     }

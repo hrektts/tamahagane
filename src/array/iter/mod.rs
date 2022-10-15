@@ -171,7 +171,7 @@ mod tests {
     use crate::{
         s,
         storage::{Storage, StorageImpl},
-        Array, NDArray, NDArrayMut, NDArrayOwned, NDims, Result,
+        Array, NDArray, NDArrayMut, NDArrayOwned, Result,
     };
 
     macro_rules! test_iterator_of_1d_array {
@@ -245,7 +245,7 @@ mod tests {
 
     #[test]
     fn iterate_empty_array() {
-        let a = Array::<StorageImpl<Vec<u64>>, NDims<3>>::zeros(&[1_usize, 0, 3]);
+        let a = Array::<StorageImpl<Vec<u64>>, _>::zeros(&[1_usize, 0, 3]);
 
         assert!(a.iter().next().is_none());
     }
