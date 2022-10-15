@@ -9,7 +9,7 @@ use core::{
     ops::{Index, IndexMut},
 };
 
-use crate::Order;
+use crate::{Dimensionality, DynDim, NDims, Order};
 
 pub trait Shape:
     AsRef<[usize]>
@@ -22,6 +22,7 @@ pub trait Shape:
     + IndexMut<usize, Output = usize>
     + PartialEq
 {
+    type Dimensionality: Dimensionality;
     type Strides: AsRef<[isize]>
         + AsMut<[isize]>
         + Clone
@@ -32,6 +33,7 @@ pub trait Shape:
         + IndexMut<usize, Output = isize>
         + PartialEq;
     fn array_len(&self) -> usize;
+    fn as_associated_shape(&self) -> &<Self::Dimensionality as Dimensionality>::Shape;
     fn n_dims(&self) -> usize;
     fn to_default_strides<O>(&self) -> Self::Strides
     where
@@ -39,10 +41,15 @@ pub trait Shape:
 }
 
 impl<const N: usize> Shape for [usize; N] {
+    type Dimensionality = NDims<N>;
     type Strides = [isize; N];
 
     fn array_len(&self) -> usize {
         self.iter().product()
+    }
+
+    fn as_associated_shape(&self) -> &<Self::Dimensionality as Dimensionality>::Shape {
+        self
     }
 
     fn n_dims(&self) -> usize {
@@ -60,10 +67,15 @@ impl<const N: usize> Shape for [usize; N] {
 }
 
 impl Shape for Vec<usize> {
+    type Dimensionality = DynDim;
     type Strides = Vec<isize>;
 
     fn array_len(&self) -> usize {
         self.iter().product()
+    }
+
+    fn as_associated_shape(&self) -> &<Self::Dimensionality as Dimensionality>::Shape {
+        self
     }
 
     fn n_dims(&self) -> usize {
