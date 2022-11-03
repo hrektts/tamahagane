@@ -52,6 +52,9 @@ mod util;
 
 pub mod storage;
 
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+
 use num_traits::{One, Zero};
 
 use storage::{Storage, StorageMut, StorageOwned};
@@ -161,3 +164,5 @@ pub trait NDArrayOwned: NDArray {
         <Self::S as Storage>::Elem: Zero,
         Sh: Shape<Dimensionality = Self::D>;
 }
+
+pub type Array<T, D, O = RowMajor> = ArrayBase<storage::StorageBase<Vec<T>>, D, O>;
