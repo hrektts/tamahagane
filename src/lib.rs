@@ -17,7 +17,7 @@
 extern crate alloc;
 
 mod array;
-pub use array::{Array, Iter, IterMut, Scalar};
+pub use array::{Array, Iter, IterMut, SequenceIter};
 
 mod array_index;
 pub use array_index::{ArrayIndex, NewAxis};
@@ -56,100 +56,104 @@ use num_traits::{One, Zero};
 
 use storage::{Storage, StorageMut, StorageOwned};
 
-pub trait NDArray<S, D, O>
-where
-    D: Dimensionality,
-    O: Order,
-    S: Storage,
-{
-    #[allow(clippy::type_complexity)]
+pub trait NDArray {
+    type D: Dimensionality;
+    type O: Order;
+    type S: Storage;
+
     fn broadcast_to<BD>(
         &self,
         shape: &<BD as Dimensionality>::Shape,
-    ) -> Result<Array<<S as Storage>::View<'_>, BD, O>>
+    ) -> Result<Array<<Self::S as Storage>::View<'_>, BD, Self::O>>
     where
         BD: Dimensionality;
     fn is_empty(&self) -> bool;
-    fn iter(&self) -> Iter<'_, <S as Storage>::Elem, D>;
+    fn iter<'a>(&self) -> Iter<'a, <Self::S as Storage>::Elem, Self::D>;
+    fn iter_sequence<'a>(
+        &self,
+        axis: usize,
+    ) -> SequenceIter<'a, <Self::S as Storage>::Elem, Self::D>;
     fn len(&self) -> usize;
     fn n_dims(&self) -> usize;
     #[allow(clippy::type_complexity)]
     fn permute(
         &self,
-        axes: <D as Dimensionality>::Shape,
-    ) -> Result<Array<<S as Storage>::View<'_>, D, O>>;
-    fn shape(&self) -> &<D as Dimensionality>::Shape;
+        axes: <Self::D as Dimensionality>::Shape,
+    ) -> Result<Array<<Self::S as Storage>::View<'_>, Self::D, Self::O>>;
+    fn shape(&self) -> &<Self::D as Dimensionality>::Shape;
+    #[allow(clippy::type_complexity)]
     fn slice<ST, SD>(
         &self,
         info: SliceInfo<ST, SD>,
-    ) -> Array<<S as Storage>::View<'_>, <D as DimensionalityAdd<SD>>::Output, O>
+    ) -> Array<<Self::S as Storage>::View<'_>, <Self::D as DimensionalityAdd<SD>>::Output, Self::O>
     where
-        D: DimensionalityAdd<SD>,
+        Self::D: DimensionalityAdd<SD>,
         SD: DimensionalityDiff,
         ST: AsRef<[ArrayIndex]>;
-    fn strides(&self) -> &<<D as Dimensionality>::Shape as Shape>::Strides;
-    fn to_owned_array(&self) -> Array<<S as Storage>::Owned, D, O>;
+    fn strides(&self) -> &<<Self::D as Dimensionality>::Shape as Shape>::Strides;
+    fn to_owned_array(&self) -> Array<<Self::S as Storage>::Owned, Self::D, Self::O>;
     #[allow(clippy::type_complexity)]
     fn to_shape<NS>(
         &self,
         shape: NS,
-    ) -> Result<Array<<S as Storage>::Cow<'_>, <NS as NewShape>::Dimensionality, O>>
+    ) -> Result<Array<<Self::S as Storage>::Cow<'_>, <NS as NewShape>::Dimensionality, Self::O>>
     where
         NS: NewShape;
-    #[allow(clippy::type_complexity)]
     fn to_shape_with_order<NS, NO>(
         &self,
         shape: NS,
-    ) -> Result<Array<<S as Storage>::Cow<'_>, <NS as NewShape>::Dimensionality, NO>>
+    ) -> Result<Array<<Self::S as Storage>::Cow<'_>, <NS as NewShape>::Dimensionality, NO>>
     where
-        NS: NewShape,
-        NO: Order;
-    fn transpose(&self) -> Array<<S as Storage>::View<'_>, D, O>;
+        NO: Order,
+        NS: NewShape;
+    fn transpose(&self) -> Array<<Self::S as Storage>::View<'_>, Self::D, Self::O>;
 }
 
-pub trait NDArrayMut<S, D, O>: NDArray<S, D, O>
-where
-    D: Dimensionality,
-    O: Order,
-    S: StorageMut,
-{
-    fn fill(&mut self, value: <S as Storage>::Elem);
-    fn iter_mut(&mut self) -> IterMut<'_, <S as Storage>::Elem, D>;
+pub trait NDArrayMut: NDArray {
+    type SM: StorageMut;
+
+    fn fill(&mut self, value: <Self::S as Storage>::Elem);
+    fn iter_mut<'a>(&mut self) -> IterMut<'a, <Self::S as Storage>::Elem, Self::D>;
+    #[allow(clippy::type_complexity)]
     fn slice_mut<ST, SD>(
         &mut self,
         info: SliceInfo<ST, SD>,
-    ) -> Array<<S as StorageMut>::ViewMut<'_>, <D as DimensionalityAdd<SD>>::Output, O>
+    ) -> Array<
+        <Self::SM as StorageMut>::ViewMut<'_>,
+        <Self::D as DimensionalityAdd<SD>>::Output,
+        Self::O,
+    >
     where
-        D: DimensionalityAdd<SD>,
+        Self::D: DimensionalityAdd<SD>,
         SD: DimensionalityDiff,
         ST: AsRef<[ArrayIndex]>;
 }
 
-pub trait NDArrayOwned<S, D, O>: NDArray<S, D, O>
-where
-    D: Dimensionality,
-    O: Order,
-    S: StorageOwned,
-{
+pub trait NDArrayOwned: NDArray {
+    type SO: StorageOwned;
+
     fn allocate_uninitialized<Sh>(shape: &Sh) -> Self
     where
-        Sh: Shape<Dimensionality = D>;
-    fn into_shape<NS>(self, shape: NS) -> Result<Array<S, <NS as NewShape>::Dimensionality, O>>
+        Sh: Shape<Dimensionality = Self::D>;
+    fn into_shape<NS>(
+        self,
+        shape: NS,
+    ) -> Result<Array<Self::S, <NS as NewShape>::Dimensionality, Self::O>>
     where
         NS: NewShape;
     fn into_shape_with_order<NS, NO>(
         self,
         shape: NS,
-    ) -> Result<Array<S, <NS as NewShape>::Dimensionality, NO>>
+    ) -> Result<Array<Self::S, <NS as NewShape>::Dimensionality, NO>>
     where
-        NS: NewShape,
-        NO: Order;
+        NO: Order,
+        NS: NewShape;
     fn ones<Sh>(shape: &Sh) -> Self
     where
-        <S as Storage>::Elem: One,
-        Sh: Shape<Dimensionality = D>;
+        <Self::S as Storage>::Elem: One,
+        Sh: Shape<Dimensionality = Self::D>;
     fn zeros<Sh>(shape: &Sh) -> Self
     where
-        <S as Storage>::Elem: Zero,
-        Sh: Shape<Dimensionality = D>;
+        <Self::S as Storage>::Elem: Zero,
+        Sh: Shape<Dimensionality = Self::D>;
 }

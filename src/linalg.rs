@@ -1,4 +1,4 @@
-pub trait Dot<'a, Rhs> {
+pub trait Dot<Rhs> {
     type Output;
-    fn dot(&'a self, rhs: Rhs) -> Self::Output;
+    fn dot(&self, rhs: Rhs) -> Self::Output;
 }
