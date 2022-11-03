@@ -17,28 +17,6 @@ use crate::{
     Dimensionality, DimensionalityMax, NDArray, NDArrayMut, NDArrayOwned, Order, Shape,
 };
 
-pub trait Scalar: Copy {}
-
-impl Scalar for bool {}
-impl Scalar for usize {}
-impl Scalar for u8 {}
-impl Scalar for u16 {}
-impl Scalar for u32 {}
-impl Scalar for u64 {}
-#[cfg(has_i128)]
-impl Scalar for u128 {}
-impl Scalar for isize {}
-impl Scalar for i8 {}
-impl Scalar for i16 {}
-impl Scalar for i32 {}
-impl Scalar for i64 {}
-#[cfg(has_i128)]
-impl Scalar for i128 {}
-impl Scalar for f32 {}
-impl Scalar for f64 {}
-impl<T> Scalar for Complex<T> where T: Copy {}
-impl<T> Scalar for Wrapping<T> where T: Copy {}
-
 macro_rules! impl_unary_op {
     ($trait:ident, $op:ident) => {
         impl<D, O, S> $trait for Array<S, D, O>
@@ -58,20 +36,20 @@ macro_rules! impl_unary_op {
             }
         }
 
-        impl<D, O, S> $trait for &Array<S, D, O>
+        impl<'a, D, O, S> $trait for &'a Array<S, D, O>
         where
             D: Dimensionality,
             <D as Dimensionality>::Shape: Shape<Dimensionality = D>,
             O: Order,
             S: Storage,
-            <S as Storage>::Elem: $trait<Output = <S as Storage>::Elem>,
+            &'a <S as Storage>::Elem: $trait<Output = <S as Storage>::Elem>,
         {
             type Output = Array<<S as Storage>::Owned, D, O>;
 
             fn $op(self) -> Self::Output {
                 let mut out = Self::Output::allocate_uninitialized(&self.shape);
                 for (dst, src) in out.iter_mut().zip(self.iter()) {
-                    *dst = src.clone().$op();
+                    *dst = src.$op();
                 }
                 out
             }
@@ -100,7 +78,7 @@ where
 
 macro_rules! impl_binary_op {
     ($trait:ident, $op:ident) => {
-        impl<D, D1, O, S, S1> $trait<Array<S1, D1, O>> for Array<S, D, O>
+        impl<'a, D, D1, O, S, S1, T> $trait<T> for Array<S, D, O>
         where
             D: Dimensionality + DimensionalityMax<D1>,
             <<D as DimensionalityMax<D1>>::Output as Dimensionality>::Shape:
@@ -108,35 +86,20 @@ macro_rules! impl_binary_op {
             D1: Dimensionality,
             O: Order,
             S: StorageMut + StorageOwned,
-            <S as Storage>::Elem: $trait<<S1 as Storage>::Elem, Output = <S as Storage>::Elem>,
+            <S as Storage>::Elem: $trait<&'a <S1 as Storage>::Elem, Output = <S as Storage>::Elem>,
             S1: Storage,
+            <S1 as Storage>::Elem: 'a,
+            T: NDArray<D = D1, O = O, S = S1>,
         {
             type Output = Array<S, <D as DimensionalityMax<D1>>::Output, O>;
 
-            fn $op(self, rhs: Array<S1, D1, O>) -> Self::Output {
-                self.$op(&rhs)
-            }
-        }
+            fn $op(mut self, rhs: T) -> Self::Output {
+                let out_shape =
+                    routine::broadcast_shape::<D, D1>(&self.shape, rhs.shape()).unwrap();
 
-        impl<D, D1, O, S, S1> $trait<&Array<S1, D1, O>> for Array<S, D, O>
-        where
-            D: Dimensionality + DimensionalityMax<D1>,
-            <<D as DimensionalityMax<D1>>::Output as Dimensionality>::Shape:
-                Shape<Dimensionality = <D as DimensionalityMax<D1>>::Output>,
-            D1: Dimensionality,
-            O: Order,
-            S: StorageMut + StorageOwned,
-            <S as Storage>::Elem: $trait<<S1 as Storage>::Elem, Output = <S as Storage>::Elem>,
-            S1: Storage,
-        {
-            type Output = Array<S, <D as DimensionalityMax<D1>>::Output, O>;
-
-            fn $op(mut self, rhs: &Array<S1, D1, O>) -> Self::Output {
-                let out_shape = routine::broadcast_shape::<D, D1>(&self.shape, &rhs.shape).unwrap();
-
-                if self.shape.as_ref() == rhs.shape.as_ref() {
+                if self.shape.as_ref() == rhs.shape().as_ref() {
                     for (dst, src) in self.iter_mut().zip(rhs.iter()) {
-                        *dst = dst.clone().$op(src.clone());
+                        *dst = dst.clone().$op(src);
                     }
                     Array {
                         strides: convert_strides::<D, D1>(&self.strides, out_shape.n_dims()),
@@ -151,7 +114,7 @@ macro_rules! impl_binary_op {
                             .unwrap()
                             .iter(),
                     ) {
-                        *dst = dst.clone().$op(src.clone());
+                        *dst = dst.clone().$op(src);
                     }
                     Array {
                         strides: convert_strides::<D, D1>(&self.strides, out_shape.n_dims()),
@@ -163,66 +126,14 @@ macro_rules! impl_binary_op {
                 } else {
                     let mut out = Self::Output::allocate_uninitialized(&out_shape);
                     for (dst, (l, r)) in out.iter_mut().zip(self.iter().zip(rhs.iter())) {
-                        *dst = l.clone().$op(r.clone());
+                        *dst = l.clone().$op(r);
                     }
                     out
                 }
             }
         }
 
-        impl<D, D1, O, S, S1> $trait<Array<S1, D1, O>> for &Array<S, D, O>
-        where
-            D: Dimensionality,
-            D1: Dimensionality + DimensionalityMax<D>,
-            <<D1 as DimensionalityMax<D>>::Output as Dimensionality>::Shape:
-                Shape<Dimensionality = <D1 as DimensionalityMax<D>>::Output>,
-            O: Order,
-            S: Storage,
-            <S as Storage>::Elem: $trait<<S1 as Storage>::Elem, Output = <S1 as Storage>::Elem>,
-            S1: StorageMut + StorageOwned,
-        {
-            type Output = Array<S1, <D1 as DimensionalityMax<D>>::Output, O>;
-
-            fn $op(self, mut rhs: Array<S1, D1, O>) -> Self::Output {
-                let out_shape = routine::broadcast_shape::<D1, D>(&rhs.shape, &self.shape).unwrap();
-
-                if self.shape.as_ref() == rhs.shape.as_ref() {
-                    for (dst, src) in rhs.iter_mut().zip(self.iter()) {
-                        *dst = src.clone().$op(dst.clone());
-                    }
-                    Array {
-                        strides: convert_strides::<D1, D>(&rhs.strides, out_shape.n_dims()),
-                        shape: out_shape,
-                        storage: rhs.storage,
-                        offset: rhs.offset,
-                        phantom: PhantomData,
-                    }
-                } else if self.shape.as_ref() == out_shape.as_ref() {
-                    for (dst, src) in rhs.iter_mut().zip(
-                        self.broadcast_to::<<D1 as DimensionalityMax<D>>::Output>(&out_shape)
-                            .unwrap()
-                            .iter(),
-                    ) {
-                        *dst = src.clone().$op(dst.clone());
-                    }
-                    Array {
-                        strides: convert_strides::<D1, D>(&rhs.strides, out_shape.n_dims()),
-                        shape: out_shape,
-                        storage: rhs.storage,
-                        offset: rhs.offset,
-                        phantom: PhantomData,
-                    }
-                } else {
-                    let mut out = Self::Output::allocate_uninitialized(&out_shape);
-                    for (dst, (l, r)) in out.iter_mut().zip(self.iter().zip(rhs.iter())) {
-                        *dst = l.clone().$op(r.clone());
-                    }
-                    out
-                }
-            }
-        }
-
-        impl<D, D1, O, S, S1> $trait<&Array<S1, D1, O>> for &Array<S, D, O>
+        impl<'a, 'b, D, D1, O, S, S1, T> $trait<T> for &'a Array<S, D, O>
         where
             D: Dimensionality + DimensionalityMax<D1>,
             <<D as DimensionalityMax<D1>>::Output as Dimensionality>::Shape:
@@ -230,16 +141,21 @@ macro_rules! impl_binary_op {
             D1: Dimensionality,
             O: Order,
             S: Storage,
-            <S as Storage>::Elem: $trait<<S1 as Storage>::Elem, Output = <S as Storage>::Elem>,
+            <S as Storage>::Elem: 'a,
+            &'a <S as Storage>::Elem:
+                $trait<&'b <S1 as Storage>::Elem, Output = <S as Storage>::Elem>,
             S1: Storage,
+            <S1 as Storage>::Elem: 'b,
+            T: NDArray<D = D1, O = O, S = S1>,
         {
             type Output = Array<<S as Storage>::Owned, <D as DimensionalityMax<D1>>::Output, O>;
 
-            fn $op(self, rhs: &Array<S1, D1, O>) -> Self::Output {
-                let out_shape = routine::broadcast_shape::<D, D1>(&self.shape, &rhs.shape).unwrap();
+            fn $op(self, rhs: T) -> Self::Output {
+                let out_shape =
+                    routine::broadcast_shape::<D, D1>(&self.shape, rhs.shape()).unwrap();
                 let mut out = Self::Output::allocate_uninitialized(&out_shape);
                 for (dst, (l, r)) in out.iter_mut().zip(self.iter().zip(rhs.iter())) {
-                    *dst = l.clone().$op(r.clone());
+                    *dst = l.$op(r);
                 }
                 out
             }
@@ -258,19 +174,19 @@ impl_binary_op!(Shl, shl);
 impl_binary_op!(Shr, shr);
 impl_binary_op!(Sub, sub);
 
-macro_rules! impl_binary_op_with_scalar {
-    ($trait:ident, $op:ident) => {
-        impl<D, O, S, T> $trait<T> for Array<S, D, O>
+macro_rules! impl_binary_op_with_type {
+    (<$( $param:ident ),*>, $trait:ident, $op:ident, $type:ty) => {
+        impl<D, O, S, $( $param ),*> $trait<$type> for Array<S, D, O>
         where
             D: Dimensionality,
             O: Order,
             S: StorageMut + StorageOwned,
-            <S as Storage>::Elem: $trait<T, Output = <S as Storage>::Elem>,
-            T: Scalar,
+            <S as Storage>::Elem: $trait<$type, Output = <S as Storage>::Elem>,
+            $( $param: Copy ),*
         {
             type Output = Array<S, D, O>;
 
-            fn $op(mut self, rhs: T) -> Self::Output {
+            fn $op(mut self, rhs: $type) -> Self::Output {
                 for elem in self.iter_mut() {
                     *elem = elem.clone().$op(rhs);
                 }
@@ -278,21 +194,22 @@ macro_rules! impl_binary_op_with_scalar {
             }
         }
 
-        impl<D, O, S, T> $trait<T> for &Array<S, D, O>
+        impl<'a, D, O, S, $( $param ),*> $trait<$type> for &'a Array<S, D, O>
         where
             D: Dimensionality,
             <D as Dimensionality>::Shape: Shape<Dimensionality = D>,
             O: Order,
             S: Storage,
-            <S as Storage>::Elem: $trait<T, Output = <S as Storage>::Elem>,
-            T: Scalar,
+            <S as Storage>::Elem: 'a,
+            &'a <S as Storage>::Elem: $trait<$type, Output = <S as Storage>::Elem>,
+            $( $param: Copy ),*
         {
             type Output = Array<<S as Storage>::Owned, D, O>;
 
-            fn $op(self, rhs: T) -> Self::Output {
+            fn $op(self, rhs: $type) -> Self::Output {
                 let mut out = Self::Output::allocate_uninitialized(&self.shape);
                 for (dst, src) in out.iter_mut().zip(self.iter()) {
-                    *dst = src.clone().$op(rhs);
+                    *dst = src.$op(rhs);
                 }
                 out
             }
@@ -300,24 +217,48 @@ macro_rules! impl_binary_op_with_scalar {
     };
 }
 
-impl_binary_op_with_scalar!(Add, add);
-impl_binary_op_with_scalar!(BitAnd, bitand);
-impl_binary_op_with_scalar!(BitOr, bitor);
-impl_binary_op_with_scalar!(BitXor, bitxor);
-impl_binary_op_with_scalar!(Div, div);
-impl_binary_op_with_scalar!(Mul, mul);
-impl_binary_op_with_scalar!(Rem, rem);
-impl_binary_op_with_scalar!(Shl, shl);
-impl_binary_op_with_scalar!(Shr, shr);
-impl_binary_op_with_scalar!(Sub, sub);
+macro_rules! impl_all_binary_op_with_type {
+    (< $( $param:ident ),* >, $type:ty) => {
+        impl_binary_op_with_type!(<$( $param ),*>, Add, add, $type);
+        impl_binary_op_with_type!(<$( $param ),*>, BitAnd, bitand, $type);
+        impl_binary_op_with_type!(<$( $param ),*>, BitOr, bitor, $type);
+        impl_binary_op_with_type!(<$( $param ),*>, BitXor, bitxor, $type);
+        impl_binary_op_with_type!(<$( $param ),*>, Div, div, $type);
+        impl_binary_op_with_type!(<$( $param ),*>, Mul, mul, $type);
+        impl_binary_op_with_type!(<$( $param ),*>, Rem, rem, $type);
+        impl_binary_op_with_type!(<$( $param ),*>, Shl, shl, $type);
+        impl_binary_op_with_type!(<$( $param ),*>, Shr, shr, $type);
+        impl_binary_op_with_type!(<$( $param ),*>, Sub, sub, $type);
+    };
+}
 
-macro_rules! impl_binary_op_for_scalar {
-    ($trait:ident, $op:ident, $scalar_type:ty) => {
-        impl<D, O, S> $trait<Array<S, D, O>> for $scalar_type
+impl_all_binary_op_with_type!(<>, bool);
+impl_all_binary_op_with_type!(<>, usize);
+impl_all_binary_op_with_type!(<>, u8);
+impl_all_binary_op_with_type!(<>, u16);
+impl_all_binary_op_with_type!(<>, u32);
+impl_all_binary_op_with_type!(<>, u64);
+#[cfg(has_i128)]
+impl_all_binary_op_with_type!(<>, u128);
+impl_all_binary_op_with_type!(<>, isize);
+impl_all_binary_op_with_type!(<>, i8);
+impl_all_binary_op_with_type!(<>, i16);
+impl_all_binary_op_with_type!(<>, i32);
+impl_all_binary_op_with_type!(<>, i64);
+#[cfg(has_i128)]
+impl_all_binary_op_with_type!(<>, i128);
+impl_all_binary_op_with_type!(<>, f32);
+impl_all_binary_op_with_type!(<>, f64);
+impl_all_binary_op_with_type!(<T>, Complex<T>);
+impl_all_binary_op_with_type!(<T>, Wrapping<T>);
+
+macro_rules! impl_binary_op_for_type {
+    ($trait:ident, $op:ident, $type:ty) => {
+        impl<D, O, S> $trait<Array<S, D, O>> for $type
         where
             D: Dimensionality,
             O: Order,
-            S: StorageMut<Elem = $scalar_type> + StorageOwned<Elem = $scalar_type>,
+            S: StorageMut<Elem = $type> + StorageOwned<Elem = $type>,
         {
             type Output = Array<S, D, O>;
 
@@ -329,19 +270,19 @@ macro_rules! impl_binary_op_for_scalar {
             }
         }
 
-        impl<D, O, S> $trait<&Array<S, D, O>> for $scalar_type
+        impl<D, O, S> $trait<&Array<S, D, O>> for $type
         where
             D: Dimensionality,
             <D as Dimensionality>::Shape: Shape<Dimensionality = D>,
             O: Order,
-            S: Storage<Elem = $scalar_type>,
+            S: Storage<Elem = $type>,
         {
             type Output = Array<<S as Storage>::Owned, D, O>;
 
             fn $op(self, rhs: &Array<S, D, O>) -> Self::Output {
                 let mut out = Self::Output::allocate_uninitialized(&rhs.shape);
                 for (dst, src) in out.iter_mut().zip(rhs.iter()) {
-                    *dst = self.$op(src.clone())
+                    *dst = self.$op(src)
                 }
                 out
             }
@@ -349,53 +290,53 @@ macro_rules! impl_binary_op_for_scalar {
     };
 }
 
-macro_rules! impl_all_binary_op_for_scalar {
-    ($scalar_type:ty) => {
-        impl_binary_op_for_scalar!(Add, add, $scalar_type);
-        impl_binary_op_for_scalar!(BitAnd, bitand, $scalar_type);
-        impl_binary_op_for_scalar!(BitOr, bitor, $scalar_type);
-        impl_binary_op_for_scalar!(BitXor, bitxor, $scalar_type);
-        impl_binary_op_for_scalar!(Div, div, $scalar_type);
-        impl_binary_op_for_scalar!(Mul, mul, $scalar_type);
-        impl_binary_op_for_scalar!(Rem, rem, $scalar_type);
-        impl_binary_op_for_scalar!(Shl, shl, $scalar_type);
-        impl_binary_op_for_scalar!(Shr, shr, $scalar_type);
-        impl_binary_op_for_scalar!(Sub, sub, $scalar_type);
+macro_rules! impl_all_binary_op_for_type {
+    ($type:ty) => {
+        impl_binary_op_for_type!(Add, add, $type);
+        impl_binary_op_for_type!(BitAnd, bitand, $type);
+        impl_binary_op_for_type!(BitOr, bitor, $type);
+        impl_binary_op_for_type!(BitXor, bitxor, $type);
+        impl_binary_op_for_type!(Div, div, $type);
+        impl_binary_op_for_type!(Mul, mul, $type);
+        impl_binary_op_for_type!(Rem, rem, $type);
+        impl_binary_op_for_type!(Shl, shl, $type);
+        impl_binary_op_for_type!(Shr, shr, $type);
+        impl_binary_op_for_type!(Sub, sub, $type);
     };
 }
 
-impl_binary_op_for_scalar!(BitAnd, bitand, bool);
-impl_binary_op_for_scalar!(BitOr, bitor, bool);
-impl_binary_op_for_scalar!(BitXor, bitxor, bool);
+impl_binary_op_for_type!(BitAnd, bitand, bool);
+impl_binary_op_for_type!(BitOr, bitor, bool);
+impl_binary_op_for_type!(BitXor, bitxor, bool);
 
-impl_all_binary_op_for_scalar!(usize);
-impl_all_binary_op_for_scalar!(u8);
-impl_all_binary_op_for_scalar!(u16);
-impl_all_binary_op_for_scalar!(u32);
-impl_all_binary_op_for_scalar!(u64);
+impl_all_binary_op_for_type!(usize);
+impl_all_binary_op_for_type!(u8);
+impl_all_binary_op_for_type!(u16);
+impl_all_binary_op_for_type!(u32);
+impl_all_binary_op_for_type!(u64);
 #[cfg(has_i128)]
-impl_all_binary_op_for_scalar!(u128);
-impl_all_binary_op_for_scalar!(isize);
-impl_all_binary_op_for_scalar!(i8);
-impl_all_binary_op_for_scalar!(i16);
-impl_all_binary_op_for_scalar!(i32);
-impl_all_binary_op_for_scalar!(i64);
+impl_all_binary_op_for_type!(u128);
+impl_all_binary_op_for_type!(isize);
+impl_all_binary_op_for_type!(i8);
+impl_all_binary_op_for_type!(i16);
+impl_all_binary_op_for_type!(i32);
+impl_all_binary_op_for_type!(i64);
 #[cfg(has_i128)]
-impl_all_binary_op_for_scalar!(i128);
+impl_all_binary_op_for_type!(i128);
 
-impl_binary_op_for_scalar!(Add, add, f32);
-impl_binary_op_for_scalar!(Div, div, f32);
-impl_binary_op_for_scalar!(Mul, mul, f32);
-impl_binary_op_for_scalar!(Rem, rem, f32);
-impl_binary_op_for_scalar!(Sub, sub, f32);
+impl_binary_op_for_type!(Add, add, f32);
+impl_binary_op_for_type!(Div, div, f32);
+impl_binary_op_for_type!(Mul, mul, f32);
+impl_binary_op_for_type!(Rem, rem, f32);
+impl_binary_op_for_type!(Sub, sub, f32);
 
-impl_binary_op_for_scalar!(Add, add, f64);
-impl_binary_op_for_scalar!(Div, div, f64);
-impl_binary_op_for_scalar!(Mul, mul, f64);
-impl_binary_op_for_scalar!(Rem, rem, f64);
-impl_binary_op_for_scalar!(Sub, sub, f64);
+impl_binary_op_for_type!(Add, add, f64);
+impl_binary_op_for_type!(Div, div, f64);
+impl_binary_op_for_type!(Mul, mul, f64);
+impl_binary_op_for_type!(Rem, rem, f64);
+impl_binary_op_for_type!(Sub, sub, f64);
 
-macro_rules! impl_binary_op_for_scalar_wrapped {
+macro_rules! impl_binary_op_for_wrapper {
     ($trait:ident, $op:ident, $wrapper:ident) => {
         impl<D, O, S, T> $trait<Array<S, D, O>> for $wrapper<T>
         where
@@ -437,55 +378,58 @@ macro_rules! impl_binary_op_for_scalar_wrapped {
     };
 }
 
-macro_rules! impl_all_binary_op_for_scalar_wrapped {
+macro_rules! impl_all_binary_op_for_wrapper {
     ($wrapper:ident) => {
-        impl_binary_op_for_scalar_wrapped!(Add, add, $wrapper);
-        impl_binary_op_for_scalar_wrapped!(BitAnd, bitand, $wrapper);
-        impl_binary_op_for_scalar_wrapped!(BitOr, bitor, $wrapper);
-        impl_binary_op_for_scalar_wrapped!(BitXor, bitxor, $wrapper);
-        impl_binary_op_for_scalar_wrapped!(Div, div, $wrapper);
-        impl_binary_op_for_scalar_wrapped!(Mul, mul, $wrapper);
-        impl_binary_op_for_scalar_wrapped!(Rem, rem, $wrapper);
-        impl_binary_op_for_scalar_wrapped!(Shl, shl, $wrapper);
-        impl_binary_op_for_scalar_wrapped!(Shr, shr, $wrapper);
-        impl_binary_op_for_scalar_wrapped!(Sub, sub, $wrapper);
+        impl_binary_op_for_wrapper!(Add, add, $wrapper);
+        impl_binary_op_for_wrapper!(BitAnd, bitand, $wrapper);
+        impl_binary_op_for_wrapper!(BitOr, bitor, $wrapper);
+        impl_binary_op_for_wrapper!(BitXor, bitxor, $wrapper);
+        impl_binary_op_for_wrapper!(Div, div, $wrapper);
+        impl_binary_op_for_wrapper!(Mul, mul, $wrapper);
+        impl_binary_op_for_wrapper!(Rem, rem, $wrapper);
+        impl_binary_op_for_wrapper!(Shl, shl, $wrapper);
+        impl_binary_op_for_wrapper!(Shr, shr, $wrapper);
+        impl_binary_op_for_wrapper!(Sub, sub, $wrapper);
     };
 }
 
-impl_all_binary_op_for_scalar_wrapped!(Complex);
-impl_all_binary_op_for_scalar_wrapped!(Wrapping);
+impl_all_binary_op_for_wrapper!(Complex);
+impl_all_binary_op_for_wrapper!(Wrapping);
 
 macro_rules! impl_binary_assign_op {
     ($trait:ident, $op:ident) => {
-        impl<D, D1, O, S, S1> $trait<&Array<S1, D1, O>> for Array<S, D, O>
+        impl<'a, D, D1, O, S, S1, T> $trait<T> for Array<S, D, O>
         where
             D: Dimensionality + DimensionalityMax<D1>,
             D1: Dimensionality,
             O: Order,
             S: StorageMut,
-            <S as Storage>::Elem: $trait<<S1 as Storage>::Elem> + Clone,
+            <S as Storage>::Elem: $trait<&'a <S1 as Storage>::Elem>,
             S1: Storage,
+            <S1 as Storage>::Elem: 'a,
+            T: NDArray<D = D1, O = O, S = S1>,
         {
-            fn $op(&mut self, rhs: &Array<S1, D1, O>) {
-                if self.shape.as_ref() == rhs.shape.as_ref() {
+            fn $op(&mut self, rhs: T) {
+                if self.shape.as_ref() == rhs.shape().as_ref() {
                     for (dst, src) in self.iter_mut().zip(rhs.iter()) {
-                        dst.$op(src.clone());
+                        dst.$op(src);
                     }
                 } else {
                     let out_shape =
-                        routine::broadcast_shape::<D, D1>(&self.shape, &rhs.shape).unwrap();
+                        routine::broadcast_shape::<D, D1>(&self.shape, &rhs.shape()).unwrap();
                     if self.shape.as_ref() == out_shape.as_ref() {
                         for (dst, src) in self.iter_mut().zip(
                             rhs.broadcast_to::<<D as DimensionalityMax<D1>>::Output>(&out_shape)
                                 .unwrap()
                                 .iter(),
                         ) {
-                            dst.$op(src.clone());
+                            dst.$op(src);
                         }
                     } else {
                         panic!(
                             "cannot broadcast array from shape {:?} to {:?}",
-                            rhs.shape, self.shape
+                            rhs.shape(),
+                            self.shape
                         );
                     }
                 }
@@ -505,17 +449,17 @@ impl_binary_assign_op!(ShlAssign, shl_assign);
 impl_binary_assign_op!(ShrAssign, shr_assign);
 impl_binary_assign_op!(SubAssign, sub_assign);
 
-macro_rules! impl_binary_assign_op_with_scalar {
-    ($trait:ident, $op:ident) => {
-        impl<D, O, S, T> $trait<T> for Array<S, D, O>
+macro_rules! impl_binary_assign_op_with_type {
+    (<$( $param:ident ),*>, $trait:ident, $op:ident, $type:ty) => {
+        impl<D, O, S, $( $param ),*> $trait<$type> for Array<S, D, O>
         where
             D: Dimensionality,
             O: Order,
             S: StorageMut,
-            <S as Storage>::Elem: $trait<T>,
-            T: Scalar,
+            <S as Storage>::Elem: $trait<$type>,
+            $( $param: Copy ),*
         {
-            fn $op(&mut self, rhs: T) {
+            fn $op(&mut self, rhs: $type) {
                 for elem in self.iter_mut() {
                     elem.$op(rhs)
                 }
@@ -524,16 +468,40 @@ macro_rules! impl_binary_assign_op_with_scalar {
     };
 }
 
-impl_binary_assign_op_with_scalar!(AddAssign, add_assign);
-impl_binary_assign_op_with_scalar!(BitAndAssign, bitand_assign);
-impl_binary_assign_op_with_scalar!(BitOrAssign, bitor_assign);
-impl_binary_assign_op_with_scalar!(BitXorAssign, bitxor_assign);
-impl_binary_assign_op_with_scalar!(DivAssign, div_assign);
-impl_binary_assign_op_with_scalar!(MulAssign, mul_assign);
-impl_binary_assign_op_with_scalar!(RemAssign, rem_assign);
-impl_binary_assign_op_with_scalar!(ShlAssign, shl_assign);
-impl_binary_assign_op_with_scalar!(ShrAssign, shr_assign);
-impl_binary_assign_op_with_scalar!(SubAssign, sub_assign);
+macro_rules! impl_all_binary_assign_op_with_type {
+    (<$( $param:ident ),*>, $type:ty) => {
+        impl_binary_assign_op_with_type!(<$( $param ),*>, AddAssign, add_assign, $type);
+        impl_binary_assign_op_with_type!(<$( $param ),*>, BitAndAssign, bitand_assign, $type);
+        impl_binary_assign_op_with_type!(<$( $param ),*>, BitOrAssign, bitor_assign, $type);
+        impl_binary_assign_op_with_type!(<$( $param ),*>, BitXorAssign, bitxor_assign, $type);
+        impl_binary_assign_op_with_type!(<$( $param ),*>, DivAssign, div_assign, $type);
+        impl_binary_assign_op_with_type!(<$( $param ),*>, MulAssign, mul_assign, $type);
+        impl_binary_assign_op_with_type!(<$( $param ),*>, RemAssign, rem_assign, $type);
+        impl_binary_assign_op_with_type!(<$( $param ),*>, ShlAssign, shl_assign, $type);
+        impl_binary_assign_op_with_type!(<$( $param ),*>, ShrAssign, shr_assign, $type);
+        impl_binary_assign_op_with_type!(<$( $param ),*>, SubAssign, sub_assign, $type);
+    };
+}
+
+impl_all_binary_assign_op_with_type!(<>, bool);
+impl_all_binary_assign_op_with_type!(<>, usize);
+impl_all_binary_assign_op_with_type!(<>, u8);
+impl_all_binary_assign_op_with_type!(<>, u16);
+impl_all_binary_assign_op_with_type!(<>, u32);
+impl_all_binary_assign_op_with_type!(<>, u64);
+#[cfg(has_i128)]
+impl_all_binary_assign_op_with_type!(<>, u128);
+impl_all_binary_assign_op_with_type!(<>, isize);
+impl_all_binary_assign_op_with_type!(<>, i8);
+impl_all_binary_assign_op_with_type!(<>, i16);
+impl_all_binary_assign_op_with_type!(<>, i32);
+impl_all_binary_assign_op_with_type!(<>, i64);
+#[cfg(has_i128)]
+impl_all_binary_assign_op_with_type!(<>, i128);
+impl_all_binary_assign_op_with_type!(<>, f32);
+impl_all_binary_assign_op_with_type!(<>, f64);
+impl_all_binary_assign_op_with_type!(<T>, Complex<T>);
+impl_all_binary_assign_op_with_type!(<T>, Wrapping<T>);
 
 #[cfg(test)]
 mod tests {

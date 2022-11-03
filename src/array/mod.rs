@@ -1,13 +1,11 @@
 mod fmt;
 
 mod iter;
-use iter::SequenceIter;
-pub use iter::{Iter, IterMut};
+pub use iter::{Iter, IterMut, SequenceIter};
 
 mod linarg;
 
 mod ops;
-pub use ops::Scalar;
 
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
@@ -106,6 +104,10 @@ macro_rules! impl_ndarray {
                 Iter::new(self)
             }
 
+            #[inline]
+            fn iter_sequence<'a>(&self, axis: usize) -> SequenceIter<'a, <S as Storage>::Elem, D> {
+                SequenceIter::new(self, axis)
+            }
 
             #[inline]
             fn len(&self) -> usize {
@@ -705,11 +707,6 @@ where
         }
 
         Ok(inferred)
-    }
-
-    #[inline]
-    fn iter_sequence(&self, axis: usize) -> SequenceIter<'_, <S as Storage>::Elem, D> {
-        SequenceIter::new(self, axis)
     }
 }
 

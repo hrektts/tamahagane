@@ -17,7 +17,7 @@
 extern crate alloc;
 
 mod array;
-pub use array::{Array, Iter, IterMut, Scalar};
+pub use array::{Array, Iter, IterMut, SequenceIter};
 
 mod array_index;
 pub use array_index::{ArrayIndex, NewAxis};
@@ -69,6 +69,10 @@ pub trait NDArray {
         BD: Dimensionality;
     fn is_empty(&self) -> bool;
     fn iter<'a>(&self) -> Iter<'a, <Self::S as Storage>::Elem, Self::D>;
+    fn iter_sequence<'a>(
+        &self,
+        axis: usize,
+    ) -> SequenceIter<'a, <Self::S as Storage>::Elem, Self::D>;
     fn len(&self) -> usize;
     fn n_dims(&self) -> usize;
     #[allow(clippy::type_complexity)]
