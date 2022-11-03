@@ -61,272 +61,308 @@ where
     }
 }
 
-impl<D, O, S> NDArray<S, D, O> for Array<S, D, O>
-where
-    D: Dimensionality,
-    O: Order,
-    S: Storage,
-{
-    #[allow(clippy::type_complexity)]
-    fn broadcast_to<BD>(
-        &self,
-        shape: &<BD as Dimensionality>::Shape,
-    ) -> Result<Array<<S as Storage>::View<'_>, BD, O>>
-    where
-        BD: Dimensionality,
-    {
-        if shape.n_dims() < self.shape.n_dims() {
-            return Err(ShapeError::IncompatibleDimension(
-                "cannot broadcast to smaller dimensions".into(),
-            )
-            .into());
-        }
-
-        Ok(Array {
-            shape: shape.clone(),
-            strides: self.compute_strides_broadcasted::<BD>(shape)?,
-            storage: self.storage.view(),
-            offset: self.offset,
-            phantom: PhantomData,
-        })
-    }
-
-    #[inline]
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
-    #[inline]
-    fn iter(&self) -> Iter<'_, <S as Storage>::Elem, D> {
-        Iter::new(self)
-    }
-
-    #[inline]
-    fn len(&self) -> usize {
-        self.shape.array_len()
-    }
-
-    #[inline]
-    fn n_dims(&self) -> usize {
-        self.shape.n_dims()
-    }
-
-    #[allow(clippy::type_complexity)]
-    fn permute(
-        &self,
-        axes: <D as Dimensionality>::Shape,
-    ) -> Result<Array<<S as Storage>::View<'_>, D, O>> {
-        if axes.n_dims() != self.n_dims() {
-            return Err(ShapeError::IncompatibleAxis("axes do not match array".into()).into());
-        }
-
-        let mut counts = <D as Dimensionality>::shape_zeroed(axes.n_dims());
-        for &axis in axes.as_ref() {
-            if axis >= axes.n_dims() {
-                return Err(ShapeError::IncompatibleAxis(format!(
-                    "axis {} is out of bounds for array of dimension {}",
-                    axis,
-                    self.n_dims()
-                ))
-                .into());
-            }
-            counts[axis] += 1;
-        }
-        for &count in counts.as_ref() {
-            if count != 1 {
-                return Err(
-                    ShapeError::IncompatibleAxis("repeated axis in permutation".into()).into(),
-                );
-            }
-        }
-
-        let mut out_shape = counts;
-        let mut out_strides = <D as Dimensionality>::strides_zeroed(axes.n_dims());
-        for (i, &axis) in axes.as_ref().iter().enumerate() {
-            out_shape[i] = self.shape[axis];
-            out_strides[i] = self.strides[axis];
-        }
-
-        Ok(Array {
-            shape: out_shape,
-            strides: out_strides,
-            storage: self.storage.view(),
-            offset: self.offset,
-            phantom: PhantomData,
-        })
-    }
-
-    fn slice<ST, SD>(
-        &self,
-        info: SliceInfo<ST, SD>,
-    ) -> Array<<S as Storage>::View<'_>, <D as DimensionalityAdd<SD>>::Output, O>
-    where
-        D: DimensionalityAdd<SD>,
-        SD: DimensionalityDiff,
-        ST: AsRef<[ArrayIndex]>,
-    {
-        let (offset, shape, strides) = self.compute_sliced_parts(info);
-        Array {
-            shape,
-            strides,
-            storage: self.storage.view(),
-            offset,
-            phantom: PhantomData,
-        }
-    }
-
-    #[inline]
-    fn shape(&self) -> &<D as Dimensionality>::Shape {
-        &self.shape
-    }
-
-    #[inline]
-    fn strides(&self) -> &<<D as Dimensionality>::Shape as Shape>::Strides {
-        &self.strides
-    }
-
-    fn to_owned_array(&self) -> Array<<S as Storage>::Owned, D, O> {
-        Array {
-            shape: self.shape.clone(),
-            strides: self.shape.to_default_strides::<O>(),
-            storage: self.iter().cloned().collect(),
-            offset: 0,
-            phantom: PhantomData,
-        }
-    }
-
-    #[allow(clippy::type_complexity)]
-    fn to_shape<NS>(
-        &self,
-        shape: NS,
-    ) -> Result<Array<<S as Storage>::Cow<'_>, <NS as NewShape>::Dimensionality, O>>
-    where
-        NS: NewShape,
-    {
-        self.to_shape_with_order::<_, O>(shape)
-    }
-
-    #[allow(clippy::type_complexity)]
-    fn to_shape_with_order<NS, NO>(
-        &self,
-        shape: NS,
-    ) -> Result<Array<<S as Storage>::Cow<'_>, <NS as NewShape>::Dimensionality, NO>>
-    where
-        NS: NewShape,
-        NO: Order,
-    {
-        if self.n_dims() == shape.n_dims()
-            && util::type_eq::<O, NO>()
-            && self
-                .shape
-                .as_ref()
-                .iter()
-                .zip(shape.as_ref().iter())
-                .all(|(&dim, &new_dim)| dim as isize == new_dim)
+macro_rules! impl_ndarray {
+    ($type:ty) => {
+        impl<D, O, S> NDArray for $type
+        where
+            D: Dimensionality,
+            O: Order,
+            S: Storage,
         {
-            let (out_shape, out_strides) = self.convert_shape_and_strides(&shape);
-            return Ok(Array {
-                shape: out_shape,
-                strides: out_strides,
-                storage: self.storage.cow(),
-                offset: self.offset,
-                phantom: PhantomData,
-            });
-        }
+            type D = D;
+            type O = O;
+            type S = S;
 
-        let out_shape = self.infer_shape(shape)?;
-        if let Some(out_strides) = self.compute_strides_reshaped::<NO, _>(&out_shape) {
-            Ok(Array {
-                shape: out_shape,
-                strides: out_strides,
-                storage: self.storage.cow(),
-                offset: self.offset,
-                phantom: PhantomData,
-            })
-        } else {
-            Ok(Array {
-                strides: out_shape.to_default_strides::<O>(),
-                shape: out_shape,
-                storage: self.iter().cloned().collect(),
-                offset: 0,
-                phantom: PhantomData,
-            })
-        }
-    }
+            fn broadcast_to<BD>(
+                &self,
+                shape: &<BD as Dimensionality>::Shape,
+            ) -> Result<Array<<Self::S as Storage>::View<'_>, BD, Self::O>>
+            where
+                BD: Dimensionality,
+            {
+                if shape.n_dims() < self.shape.n_dims() {
+                    return Err(ShapeError::IncompatibleDimension(
+                        "cannot broadcast to smaller dimensions".into(),
+                    )
+                    .into());
+                }
 
-    fn transpose(&self) -> Array<<S as Storage>::View<'_>, D, O> {
-        let mut shape = self.shape.clone();
-        shape.as_mut().reverse();
-        let mut strides = self.strides.clone();
-        strides.as_mut().reverse();
+                Ok(Array {
+                    shape: shape.clone(),
+                    strides: self.compute_strides_broadcasted::<BD>(shape)?,
+                    storage: self.storage.view(),
+                    offset: self.offset,
+                    phantom: PhantomData,
+                })
+            }
 
-        Array {
-            shape,
-            strides,
-            storage: self.storage.view(),
-            offset: self.offset,
-            phantom: PhantomData,
+            #[inline]
+            fn is_empty(&self) -> bool {
+                self.len() == 0
+            }
+
+            #[inline]
+            fn iter<'a>(&self) -> Iter<'a, <Self::S as Storage>::Elem, Self::D> {
+                Iter::new(self)
+            }
+
+
+            #[inline]
+            fn len(&self) -> usize {
+                self.shape.array_len()
+            }
+
+            #[inline]
+            fn n_dims(&self) -> usize {
+                self.shape.n_dims()
+            }
+
+            fn permute(
+                &self,
+                axes: <Self::D as Dimensionality>::Shape,
+            ) -> Result<Array<<Self::S as Storage>::View<'_>, Self::D, Self::O>> {
+                if axes.n_dims() != self.n_dims() {
+                    return Err(
+                        ShapeError::IncompatibleAxis("axes do not match array".into()).into(),
+                    );
+                }
+
+                let mut counts = <D as Dimensionality>::shape_zeroed(axes.n_dims());
+                for &axis in axes.as_ref() {
+                    if axis >= axes.n_dims() {
+                        return Err(ShapeError::IncompatibleAxis(format!(
+                            "axis {} is out of bounds for array of dimension {}",
+                            axis,
+                            self.n_dims()
+                        ))
+                        .into());
+                    }
+                    counts[axis] += 1;
+                }
+                for &count in counts.as_ref() {
+                    if count != 1 {
+                        return Err(ShapeError::IncompatibleAxis(
+                            "repeated axis in permutation".into(),
+                        )
+                        .into());
+                    }
+                }
+
+                let mut out_shape = counts;
+                let mut out_strides = <D as Dimensionality>::strides_zeroed(axes.n_dims());
+                for (i, &axis) in axes.as_ref().iter().enumerate() {
+                    out_shape[i] = self.shape[axis];
+                    out_strides[i] = self.strides[axis];
+                }
+
+                Ok(Array {
+                    shape: out_shape,
+                    strides: out_strides,
+                    storage: self.storage.view(),
+                    offset: self.offset,
+                    phantom: PhantomData,
+                })
+            }
+
+            fn slice<ST, SD>(
+                &self,
+                info: SliceInfo<ST, SD>,
+            ) -> Array<
+                <Self::S as Storage>::View<'_>,
+                <Self::D as DimensionalityAdd<SD>>::Output,
+                Self::O,
+            >
+            where
+                Self::D: DimensionalityAdd<SD>,
+                SD: DimensionalityDiff,
+                ST: AsRef<[ArrayIndex]>,
+            {
+                let (offset, shape, strides) = self.compute_sliced_parts(info);
+                Array {
+                    shape,
+                    strides,
+                    storage: self.storage.view(),
+                    offset,
+                    phantom: PhantomData,
+                }
+            }
+
+            #[inline]
+            fn shape(&self) -> &<Self::D as Dimensionality>::Shape {
+                &self.shape
+            }
+
+            #[inline]
+            fn strides(&self) -> &<<Self::D as Dimensionality>::Shape as Shape>::Strides {
+                &self.strides
+            }
+
+            fn to_owned_array(&self) -> Array<<Self::S as Storage>::Owned, Self::D, Self::O> {
+                Array {
+                    shape: self.shape.clone(),
+                    strides: self.shape.to_default_strides::<Self::O>(),
+                    storage: self.iter().cloned().collect(),
+                    offset: 0,
+                    phantom: PhantomData,
+                }
+            }
+
+            fn to_shape<NS>(
+                &self,
+                shape: NS,
+            ) -> Result<
+                Array<<Self::S as Storage>::Cow<'_>, <NS as NewShape>::Dimensionality, Self::O>,
+            >
+            where
+                NS: NewShape,
+            {
+                self.to_shape_with_order::<_, O>(shape)
+            }
+
+            fn to_shape_with_order<NS, NO>(
+                &self,
+                shape: NS,
+            ) -> Result<Array<<Self::S as Storage>::Cow<'_>, <NS as NewShape>::Dimensionality, NO>>
+            where
+                NO: Order,
+                NS: NewShape,
+            {
+                if self.n_dims() == shape.n_dims()
+                    && util::type_eq::<O, NO>()
+                    && self
+                        .shape
+                        .as_ref()
+                        .iter()
+                        .zip(shape.as_ref().iter())
+                        .all(|(&dim, &new_dim)| dim as isize == new_dim)
+                {
+                    let (out_shape, out_strides) = self.convert_shape_and_strides(&shape);
+                    return Ok(Array {
+                        shape: out_shape,
+                        strides: out_strides,
+                        storage: self.storage.cow(),
+                        offset: self.offset,
+                        phantom: PhantomData,
+                    });
+                }
+
+                let out_shape = self.infer_shape(shape)?;
+                if let Some(out_strides) = self.compute_strides_reshaped::<NO, _>(&out_shape) {
+                    Ok(Array {
+                        shape: out_shape,
+                        strides: out_strides,
+                        storage: self.storage.cow(),
+                        offset: self.offset,
+                        phantom: PhantomData,
+                    })
+                } else {
+                    Ok(Array {
+                        strides: out_shape.to_default_strides::<O>(),
+                        shape: out_shape,
+                        storage: self.iter().cloned().collect(),
+                        offset: 0,
+                        phantom: PhantomData,
+                    })
+                }
+            }
+
+            fn transpose(&self) -> Array<<Self::S as Storage>::View<'_>, Self::D, Self::O> {
+                let mut shape = self.shape.clone();
+                shape.as_mut().reverse();
+                let mut strides = self.strides.clone();
+                strides.as_mut().reverse();
+
+                Array {
+                    shape,
+                    strides,
+                    storage: self.storage.view(),
+                    offset: self.offset,
+                    phantom: PhantomData,
+                }
+            }
         }
-    }
+    };
 }
 
-impl<D, O, S> NDArrayMut<S, D, O> for Array<S, D, O>
-where
-    D: Dimensionality,
-    O: Order,
-    S: StorageMut,
-{
-    fn fill(&mut self, value: <S as Storage>::Elem) {
-        for elem in self.iter_mut() {
-            *elem = value.clone();
-        }
-    }
+impl_ndarray!(Array<S, D, O>);
+impl_ndarray!(&Array<S, D, O>);
+impl_ndarray!(&mut Array<S, D, O>);
 
-    #[inline]
-    fn iter_mut(&mut self) -> IterMut<'_, <S as Storage>::Elem, D> {
-        IterMut::new(self)
-    }
+macro_rules! impl_ndarray_mut {
+    ($type:ty) => {
+        impl<D, O, S> NDArrayMut for $type
+        where
+            D: Dimensionality,
+            O: Order,
+            S: StorageMut,
+        {
+            type SM = S;
 
-    fn slice_mut<ST, SD>(
-        &mut self,
-        info: SliceInfo<ST, SD>,
-    ) -> Array<<S as StorageMut>::ViewMut<'_>, <D as DimensionalityAdd<SD>>::Output, O>
-    where
-        D: DimensionalityAdd<SD>,
-        SD: DimensionalityDiff,
-        ST: AsRef<[ArrayIndex]>,
-    {
-        let (offset, shape, strides) = self.compute_sliced_parts(info);
-        Array {
-            shape,
-            strides,
-            storage: self.storage.view_mut(),
-            offset,
-            phantom: PhantomData,
+            fn fill(&mut self, value: <Self::S as Storage>::Elem) {
+                for elem in self.iter_mut() {
+                    *elem = value.clone();
+                }
+            }
+
+            #[inline]
+            fn iter_mut<'a>(&mut self) -> IterMut<'a, <Self::S as Storage>::Elem, Self::D> {
+                IterMut::new(self)
+            }
+
+            fn slice_mut<ST, SD>(
+                &mut self,
+                info: SliceInfo<ST, SD>,
+            ) -> Array<
+                <Self::SM as StorageMut>::ViewMut<'_>,
+                <Self::D as DimensionalityAdd<SD>>::Output,
+                Self::O,
+            >
+            where
+                Self::D: DimensionalityAdd<SD>,
+                SD: DimensionalityDiff,
+                ST: AsRef<[ArrayIndex]>,
+            {
+                let (offset, shape, strides) = self.compute_sliced_parts(info);
+                Array {
+                    shape,
+                    strides,
+                    storage: self.storage.view_mut(),
+                    offset,
+                    phantom: PhantomData,
+                }
+            }
         }
-    }
+    };
 }
 
-impl<D, O, S> NDArrayOwned<S, D, O> for Array<S, D, O>
+impl_ndarray_mut!(Array<S, D, O>);
+impl_ndarray_mut!(&mut Array<S, D, O>);
+
+impl<D, O, S> NDArrayOwned for Array<S, D, O>
 where
     D: Dimensionality,
     O: Order,
     S: StorageOwned,
 {
+    type SO = S;
+
     fn allocate_uninitialized<Sh>(shape: &Sh) -> Self
     where
-        Sh: Shape<Dimensionality = D>,
+        Sh: Shape<Dimensionality = Self::D>,
     {
         Array {
             shape: shape.as_associated_shape().clone(),
             strides: shape.as_associated_shape().to_default_strides::<O>(),
-            storage: S::allocate_uninitialized(shape.as_associated_shape().array_len()),
+            storage: Self::SO::allocate_uninitialized(shape.as_associated_shape().array_len()),
             offset: 0,
             phantom: PhantomData,
         }
     }
 
-    fn into_shape<NS>(self, shape: NS) -> Result<Array<S, <NS as NewShape>::Dimensionality, O>>
+    fn into_shape<NS>(
+        self,
+        shape: NS,
+    ) -> Result<Array<Self::S, <NS as NewShape>::Dimensionality, Self::O>>
     where
         NS: NewShape,
     {
@@ -336,7 +372,7 @@ where
     fn into_shape_with_order<NS, NO>(
         self,
         shape: NS,
-    ) -> Result<Array<S, <NS as NewShape>::Dimensionality, NO>>
+    ) -> Result<Array<Self::S, <NS as NewShape>::Dimensionality, NO>>
     where
         NS: NewShape,
         NO: Order,
@@ -382,8 +418,8 @@ where
 
     fn ones<Sh>(shape: &Sh) -> Self
     where
-        <S as Storage>::Elem: One,
-        Sh: Shape<Dimensionality = D>,
+        <Self::S as Storage>::Elem: One,
+        Sh: Shape<Dimensionality = Self::D>,
     {
         Array {
             shape: shape.as_associated_shape().clone(),
@@ -396,8 +432,8 @@ where
 
     fn zeros<Sh>(shape: &Sh) -> Self
     where
-        <S as Storage>::Elem: Zero,
-        Sh: Shape<Dimensionality = D>,
+        <Self::S as Storage>::Elem: Zero,
+        Sh: Shape<Dimensionality = Self::D>,
     {
         Array {
             shape: shape.as_associated_shape().clone(),
