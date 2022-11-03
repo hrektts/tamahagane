@@ -14,13 +14,13 @@ use core::{iter::FromIterator, marker::PhantomData};
 use num_traits::{One, Zero};
 
 use crate::{
-    storage::{Storage, StorageImpl, StorageMut, StorageOwned},
+    storage::{Storage, StorageBase, StorageMut, StorageOwned},
     util, ArrayIndex, Dimensionality, DimensionalityAdd, DimensionalityDiff, NDArray, NDArrayMut,
     NDArrayOwned, NDims, NewShape, Order, Result, RowMajor, Shape, ShapeError, SliceInfo,
 };
 
 #[derive(Clone, Hash, Eq, PartialEq)]
-pub struct Array<S, D, O = RowMajor>
+pub struct ArrayBase<S, D, O = RowMajor>
 where
     D: Dimensionality,
 {
@@ -31,24 +31,24 @@ where
     phantom: PhantomData<O>,
 }
 
-impl<T> From<Vec<T>> for Array<StorageImpl<Vec<T>>, NDims<1>> {
+impl<T> From<Vec<T>> for ArrayBase<StorageBase<Vec<T>>, NDims<1>> {
     fn from(data: Vec<T>) -> Self {
         Self {
             shape: [data.len()],
             strides: [1],
-            storage: StorageImpl::from(data),
+            storage: StorageBase::from(data),
             offset: 0,
             phantom: PhantomData,
         }
     }
 }
 
-impl<T> FromIterator<T> for Array<StorageImpl<Vec<T>>, NDims<1>>
+impl<T> FromIterator<T> for ArrayBase<StorageBase<Vec<T>>, NDims<1>>
 where
     T: Clone,
 {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
-        let storage = iter.into_iter().collect::<StorageImpl<_>>();
+        let storage = iter.into_iter().collect::<StorageBase<_>>();
         Self {
             shape: [storage.as_slice().len()],
             strides: [1],
@@ -74,7 +74,7 @@ macro_rules! impl_ndarray {
             fn broadcast_to<BD>(
                 &self,
                 shape: &<BD as Dimensionality>::Shape,
-            ) -> Result<Array<<Self::S as Storage>::View<'_>, BD, Self::O>>
+            ) -> Result<ArrayBase<<Self::S as Storage>::View<'_>, BD, Self::O>>
             where
                 BD: Dimensionality,
             {
@@ -85,7 +85,7 @@ macro_rules! impl_ndarray {
                     .into());
                 }
 
-                Ok(Array {
+                Ok(ArrayBase {
                     shape: shape.clone(),
                     strides: self.compute_strides_broadcasted::<BD>(shape)?,
                     storage: self.storage.view(),
@@ -122,7 +122,7 @@ macro_rules! impl_ndarray {
             fn permute(
                 &self,
                 axes: <Self::D as Dimensionality>::Shape,
-            ) -> Result<Array<<Self::S as Storage>::View<'_>, Self::D, Self::O>> {
+            ) -> Result<ArrayBase<<Self::S as Storage>::View<'_>, Self::D, Self::O>> {
                 if axes.n_dims() != self.n_dims() {
                     return Err(
                         ShapeError::IncompatibleAxis("axes do not match array".into()).into(),
@@ -157,7 +157,7 @@ macro_rules! impl_ndarray {
                     out_strides[i] = self.strides[axis];
                 }
 
-                Ok(Array {
+                Ok(ArrayBase {
                     shape: out_shape,
                     strides: out_strides,
                     storage: self.storage.view(),
@@ -169,7 +169,7 @@ macro_rules! impl_ndarray {
             fn slice<ST, SD>(
                 &self,
                 info: SliceInfo<ST, SD>,
-            ) -> Array<
+            ) -> ArrayBase<
                 <Self::S as Storage>::View<'_>,
                 <Self::D as DimensionalityAdd<SD>>::Output,
                 Self::O,
@@ -180,7 +180,7 @@ macro_rules! impl_ndarray {
                 ST: AsRef<[ArrayIndex]>,
             {
                 let (offset, shape, strides) = self.compute_sliced_parts(info);
-                Array {
+                ArrayBase {
                     shape,
                     strides,
                     storage: self.storage.view(),
@@ -199,8 +199,8 @@ macro_rules! impl_ndarray {
                 &self.strides
             }
 
-            fn to_owned_array(&self) -> Array<<Self::S as Storage>::Owned, Self::D, Self::O> {
-                Array {
+            fn to_owned_array(&self) -> ArrayBase<<Self::S as Storage>::Owned, Self::D, Self::O> {
+                ArrayBase {
                     shape: self.shape.clone(),
                     strides: self.shape.to_default_strides::<Self::O>(),
                     storage: self.iter().cloned().collect(),
@@ -213,7 +213,7 @@ macro_rules! impl_ndarray {
                 &self,
                 shape: NS,
             ) -> Result<
-                Array<<Self::S as Storage>::Cow<'_>, <NS as NewShape>::Dimensionality, Self::O>,
+                ArrayBase<<Self::S as Storage>::Cow<'_>, <NS as NewShape>::Dimensionality, Self::O>,
             >
             where
                 NS: NewShape,
@@ -224,7 +224,9 @@ macro_rules! impl_ndarray {
             fn to_shape_with_order<NS, NO>(
                 &self,
                 shape: NS,
-            ) -> Result<Array<<Self::S as Storage>::Cow<'_>, <NS as NewShape>::Dimensionality, NO>>
+            ) -> Result<
+                ArrayBase<<Self::S as Storage>::Cow<'_>, <NS as NewShape>::Dimensionality, NO>,
+            >
             where
                 NO: Order,
                 NS: NewShape,
@@ -239,7 +241,7 @@ macro_rules! impl_ndarray {
                         .all(|(&dim, &new_dim)| dim as isize == new_dim)
                 {
                     let (out_shape, out_strides) = self.convert_shape_and_strides(&shape);
-                    return Ok(Array {
+                    return Ok(ArrayBase {
                         shape: out_shape,
                         strides: out_strides,
                         storage: self.storage.cow(),
@@ -250,7 +252,7 @@ macro_rules! impl_ndarray {
 
                 let out_shape = self.infer_shape(shape)?;
                 if let Some(out_strides) = self.compute_strides_reshaped::<NO, _>(&out_shape) {
-                    Ok(Array {
+                    Ok(ArrayBase {
                         shape: out_shape,
                         strides: out_strides,
                         storage: self.storage.cow(),
@@ -258,7 +260,7 @@ macro_rules! impl_ndarray {
                         phantom: PhantomData,
                     })
                 } else {
-                    Ok(Array {
+                    Ok(ArrayBase {
                         strides: out_shape.to_default_strides::<O>(),
                         shape: out_shape,
                         storage: self.iter().cloned().collect(),
@@ -268,13 +270,13 @@ macro_rules! impl_ndarray {
                 }
             }
 
-            fn transpose(&self) -> Array<<Self::S as Storage>::View<'_>, Self::D, Self::O> {
+            fn transpose(&self) -> ArrayBase<<Self::S as Storage>::View<'_>, Self::D, Self::O> {
                 let mut shape = self.shape.clone();
                 shape.as_mut().reverse();
                 let mut strides = self.strides.clone();
                 strides.as_mut().reverse();
 
-                Array {
+                ArrayBase {
                     shape,
                     strides,
                     storage: self.storage.view(),
@@ -286,9 +288,9 @@ macro_rules! impl_ndarray {
     };
 }
 
-impl_ndarray!(Array<S, D, O>);
-impl_ndarray!(&Array<S, D, O>);
-impl_ndarray!(&mut Array<S, D, O>);
+impl_ndarray!(ArrayBase<S, D, O>);
+impl_ndarray!(&ArrayBase<S, D, O>);
+impl_ndarray!(&mut ArrayBase<S, D, O>);
 
 macro_rules! impl_ndarray_mut {
     ($type:ty) => {
@@ -314,7 +316,7 @@ macro_rules! impl_ndarray_mut {
             fn slice_mut<ST, SD>(
                 &mut self,
                 info: SliceInfo<ST, SD>,
-            ) -> Array<
+            ) -> ArrayBase<
                 <Self::SM as StorageMut>::ViewMut<'_>,
                 <Self::D as DimensionalityAdd<SD>>::Output,
                 Self::O,
@@ -325,7 +327,7 @@ macro_rules! impl_ndarray_mut {
                 ST: AsRef<[ArrayIndex]>,
             {
                 let (offset, shape, strides) = self.compute_sliced_parts(info);
-                Array {
+                ArrayBase {
                     shape,
                     strides,
                     storage: self.storage.view_mut(),
@@ -337,10 +339,10 @@ macro_rules! impl_ndarray_mut {
     };
 }
 
-impl_ndarray_mut!(Array<S, D, O>);
-impl_ndarray_mut!(&mut Array<S, D, O>);
+impl_ndarray_mut!(ArrayBase<S, D, O>);
+impl_ndarray_mut!(&mut ArrayBase<S, D, O>);
 
-impl<D, O, S> NDArrayOwned for Array<S, D, O>
+impl<D, O, S> NDArrayOwned for ArrayBase<S, D, O>
 where
     D: Dimensionality,
     O: Order,
@@ -352,7 +354,7 @@ where
     where
         Sh: Shape<Dimensionality = Self::D>,
     {
-        Array {
+        ArrayBase {
             shape: shape.as_associated_shape().clone(),
             strides: shape.as_associated_shape().to_default_strides::<O>(),
             storage: Self::SO::allocate_uninitialized(shape.as_associated_shape().array_len()),
@@ -364,7 +366,7 @@ where
     fn into_shape<NS>(
         self,
         shape: NS,
-    ) -> Result<Array<Self::S, <NS as NewShape>::Dimensionality, Self::O>>
+    ) -> Result<ArrayBase<Self::S, <NS as NewShape>::Dimensionality, Self::O>>
     where
         NS: NewShape,
     {
@@ -374,7 +376,7 @@ where
     fn into_shape_with_order<NS, NO>(
         self,
         shape: NS,
-    ) -> Result<Array<Self::S, <NS as NewShape>::Dimensionality, NO>>
+    ) -> Result<ArrayBase<Self::S, <NS as NewShape>::Dimensionality, NO>>
     where
         NS: NewShape,
         NO: Order,
@@ -389,7 +391,7 @@ where
                 .all(|(&dim, &new_dim)| dim as isize == new_dim)
         {
             let out_shape = self.convert_shape(&shape);
-            return Ok(Array {
+            return Ok(ArrayBase {
                 strides: out_shape.to_default_strides::<NO>(),
                 shape: out_shape,
                 storage: self.storage,
@@ -400,7 +402,7 @@ where
 
         let out_shape = self.infer_shape(shape)?;
         if let Some(out_strides) = self.compute_strides_reshaped::<NO, _>(&out_shape) {
-            Ok(Array {
+            Ok(ArrayBase {
                 shape: out_shape,
                 strides: out_strides,
                 storage: self.storage,
@@ -408,7 +410,7 @@ where
                 phantom: PhantomData,
             })
         } else {
-            Ok(Array {
+            Ok(ArrayBase {
                 strides: out_shape.to_default_strides::<O>(),
                 shape: out_shape,
                 storage: self.iter().cloned().collect(),
@@ -423,7 +425,7 @@ where
         <Self::S as Storage>::Elem: One,
         Sh: Shape<Dimensionality = Self::D>,
     {
-        Array {
+        ArrayBase {
             shape: shape.as_associated_shape().clone(),
             strides: shape.as_associated_shape().to_default_strides::<O>(),
             storage: S::ones(shape.as_associated_shape().array_len()),
@@ -437,7 +439,7 @@ where
         <Self::S as Storage>::Elem: Zero,
         Sh: Shape<Dimensionality = Self::D>,
     {
-        Array {
+        ArrayBase {
             shape: shape.as_associated_shape().clone(),
             strides: shape.as_associated_shape().to_default_strides::<O>(),
             storage: S::zeros(shape.as_associated_shape().array_len()),
@@ -447,7 +449,7 @@ where
     }
 }
 
-impl<D, O, S> Array<S, D, O>
+impl<D, O, S> ArrayBase<S, D, O>
 where
     D: Dimensionality,
     O: Order,
@@ -715,9 +717,9 @@ mod tests {
     #[cfg(not(feature = "std"))]
     use alloc::vec::Vec;
 
-    use super::Array;
+    use super::ArrayBase;
     use crate::{
-        storage::{Storage, StorageImpl},
+        storage::{Storage, StorageBase},
         ArrayIndex, ColumnMajor, DynDim, NDArray, NDArrayMut, NDArrayOwned, NDims, NewAxis, Result,
         RowMajor, Shape, Slice, SliceInfo,
     };
@@ -725,7 +727,7 @@ mod tests {
     #[test]
     fn allocate_uninitialized() {
         let shape = [2, 3, 4];
-        let a3 = Array::<StorageImpl<Vec<f64>>, _>::allocate_uninitialized(&shape);
+        let a3 = ArrayBase::<StorageBase<Vec<f64>>, _>::allocate_uninitialized(&shape);
 
         assert_eq!(a3.shape(), &shape);
     }
@@ -735,7 +737,7 @@ mod tests {
     fn broadcast_to_smaller_dimensions() {
         let a3 = (1..)
             .take(6)
-            .collect::<Array<_, _>>()
+            .collect::<ArrayBase<_, _>>()
             .into_shape([1, 2, 3])
             .unwrap();
         a3.broadcast_to::<NDims<2>>(&[2, 3]).unwrap();
@@ -746,7 +748,7 @@ mod tests {
     fn broadcast_to_invalid_shape() {
         let a3 = (1..)
             .take(6)
-            .collect::<Array<_, _>>()
+            .collect::<ArrayBase<_, _>>()
             .into_shape([1, 2, 3])
             .unwrap();
         a3.broadcast_to::<NDims<3>>(&[2, 3, 3]).unwrap();
@@ -754,7 +756,7 @@ mod tests {
 
     #[test]
     fn broadcast_to() -> Result<()> {
-        let a1 = Array::from(vec![1; 6]);
+        let a1 = ArrayBase::from(vec![1; 6]);
         {
             let a3 = a1.to_shape([1, 2, 3])?;
             {
@@ -798,48 +800,48 @@ mod tests {
     #[test]
     #[should_panic]
     fn convert_empty_array_to_ambiguous_shape() {
-        let a = Array::from(Vec::<usize>::new());
+        let a = ArrayBase::from(Vec::<usize>::new());
         a.to_shape([2, 0, -1]).unwrap();
     }
 
     #[test]
     #[should_panic]
     fn convert_empty_array_into_ambiguous_shape() {
-        let a = Array::from(Vec::<usize>::new());
+        let a = ArrayBase::from(Vec::<usize>::new());
         a.into_shape([2, 0, -1]).unwrap();
     }
 
     #[test]
     #[should_panic]
     fn convert_to_ambiguous_shape() {
-        let a = Array::from(vec![1_usize, 2, 3, 4]);
+        let a = ArrayBase::from(vec![1_usize, 2, 3, 4]);
         a.to_shape([2, -1, -1]).unwrap();
     }
 
     #[test]
     #[should_panic]
     fn convert_into_ambiguous_shape() {
-        let a = Array::from(vec![1_usize, 2, 3, 4]);
+        let a = ArrayBase::from(vec![1_usize, 2, 3, 4]);
         a.into_shape([2, -1, -1]).unwrap();
     }
 
     #[test]
     #[should_panic]
     fn convert_to_incompatible_shape() {
-        let a = Array::from(vec![1_usize, 2, 3, 4]);
+        let a = ArrayBase::from(vec![1_usize, 2, 3, 4]);
         a.to_shape([2, 2, 2]).unwrap();
     }
 
     #[test]
     #[should_panic]
     fn convert_into_incompatible_shape() {
-        let a = Array::from(vec![1_usize, 2, 3, 4]);
+        let a = ArrayBase::from(vec![1_usize, 2, 3, 4]);
         a.into_shape([2, 2, 2]).unwrap();
     }
 
     #[test]
     fn convert_to_new_shape() -> Result<()> {
-        let a1 = (1..).take(24).collect::<Array<_, _>>();
+        let a1 = (1..).take(24).collect::<ArrayBase<_, _>>();
         {
             let new_shape = [2_isize, 3, 4];
             let shape = new_shape.map(|x| x as usize);
@@ -867,7 +869,7 @@ mod tests {
     #[test]
     fn convert_into_new_shape() -> Result<()> {
         {
-            let a1 = (1..).take(24).collect::<Array<_, _>>();
+            let a1 = (1..).take(24).collect::<ArrayBase<_, _>>();
             let ptr = a1.storage.as_ptr();
             let new_shape = [2_isize, 3, 4];
             let shape = new_shape.map(|x| x as usize);
@@ -879,7 +881,7 @@ mod tests {
             assert_eq!(a2.offset, 0);
         }
         {
-            let a1 = (1..).take(24).collect::<Array<_, _>>();
+            let a1 = (1..).take(24).collect::<ArrayBase<_, _>>();
             let ptr = a1.storage.as_ptr();
             let new_shape = [2_isize, 3, 4];
             let shape = new_shape.map(|x| x as usize);
@@ -897,12 +899,12 @@ mod tests {
     #[test]
     fn convert_to_the_same_shape() -> Result<()> {
         let data = vec![1_usize, 2, 3, 4];
-        let a = Array::from(data.clone());
+        let a = ArrayBase::from(data.clone());
         let subject = a.to_shape([4])?;
 
         assert_eq!(subject.shape, a.shape);
         assert_eq!(subject.strides, a.strides);
-        assert_eq!(subject.storage, StorageImpl::<Vec<_>>::from(data).cow());
+        assert_eq!(subject.storage, StorageBase::<Vec<_>>::from(data).cow());
         assert_eq!(subject.offset, a.offset);
 
         Ok(())
@@ -911,12 +913,12 @@ mod tests {
     #[test]
     fn convert_into_the_same_shape() -> Result<()> {
         let data = vec![1_usize, 2, 3, 4];
-        let a = Array::from(data.clone());
+        let a = ArrayBase::from(data.clone());
         let subject = a.into_shape([4])?;
 
         assert_eq!(subject.shape, [4]);
         assert_eq!(subject.strides, [1]);
-        assert_eq!(subject.storage, StorageImpl::<Vec<_>>::from(data));
+        assert_eq!(subject.storage, StorageBase::<Vec<_>>::from(data));
         assert_eq!(subject.offset, 0);
 
         Ok(())
@@ -926,7 +928,7 @@ mod tests {
     fn fill() -> Result<()> {
         let mut a3 = (1..)
             .take(24)
-            .collect::<Array<_, _>>()
+            .collect::<ArrayBase<_, _>>()
             .into_shape([2, 3, 4])?;
         a3.fill(7);
 
@@ -937,8 +939,8 @@ mod tests {
 
     #[test]
     fn is_empty() -> Result<()> {
-        let a1 = Array::from(Vec::<usize>::new());
-        let a3 = Array::from(Vec::<usize>::new()).into_shape([3, 2, 0])?;
+        let a1 = ArrayBase::from(Vec::<usize>::new());
+        let a3 = ArrayBase::from(Vec::<usize>::new()).into_shape([3, 2, 0])?;
 
         assert!(a1.is_empty());
         assert!(a3.is_empty());
@@ -949,7 +951,10 @@ mod tests {
     #[test]
     fn len() -> Result<()> {
         let shape = [2_isize, 3, 4];
-        let a3 = (1..).take(24).collect::<Array<_, _>>().into_shape(shape)?;
+        let a3 = (1..)
+            .take(24)
+            .collect::<ArrayBase<_, _>>()
+            .into_shape(shape)?;
 
         assert_eq!(a3.len(), shape.iter().map(|&x| x as usize).product());
 
@@ -959,7 +964,10 @@ mod tests {
     #[test]
     fn n_dims() -> Result<()> {
         let shape = [2_isize, 3, 4];
-        let a3 = (1..).take(24).collect::<Array<_, _>>().into_shape(shape)?;
+        let a3 = (1..)
+            .take(24)
+            .collect::<ArrayBase<_, _>>()
+            .into_shape(shape)?;
 
         assert_eq!(a3.n_dims(), shape.len());
 
@@ -969,7 +977,7 @@ mod tests {
     #[test]
     fn ones() {
         let shape = [2, 3, 4];
-        let a3 = Array::<StorageImpl<Vec<u64>>, _>::ones(&shape);
+        let a3 = ArrayBase::<StorageBase<Vec<u64>>, _>::ones(&shape);
 
         assert_eq!(a3.shape(), &shape);
         assert!(a3.iter().all(|&x| x == 1));
@@ -977,7 +985,7 @@ mod tests {
 
     #[test]
     fn permute() -> Result<()> {
-        let a3 = Array::from(vec![1; 24]).into_shape([2, 3, 4])?;
+        let a3 = ArrayBase::from(vec![1; 24]).into_shape([2, 3, 4])?;
         let a3p = a3.permute([2, 0, 1])?;
 
         assert_eq!(a3p.shape, [4, 2, 3]);
@@ -990,28 +998,31 @@ mod tests {
     #[test]
     #[should_panic]
     fn permute_by_axis_out_of_bounds() {
-        let a3 = Array::from(vec![1; 24]).into_shape([2, 3, 4]).unwrap();
+        let a3 = ArrayBase::from(vec![1; 24]).into_shape([2, 3, 4]).unwrap();
         a3.permute([0, 1, 100]).unwrap();
     }
 
     #[test]
     #[should_panic]
     fn permute_by_repeated_axes() {
-        let a3 = Array::from(vec![1; 24]).into_shape([2, 3, 4]).unwrap();
+        let a3 = ArrayBase::from(vec![1; 24]).into_shape([2, 3, 4]).unwrap();
         a3.permute([0, 1, 0]).unwrap();
     }
 
     #[test]
     #[should_panic]
     fn permute_by_wrong_number_of_axes() {
-        let a3 = Array::from(vec![1; 24]).into_shape([1, 2]).unwrap();
+        let a3 = ArrayBase::from(vec![1; 24]).into_shape([1, 2]).unwrap();
         a3.permute([1, 2]).unwrap();
     }
 
     #[test]
     fn shape() -> Result<()> {
         let shape = [2_isize, 3, 4];
-        let a3 = (1..).take(24).collect::<Array<_, _>>().into_shape(shape)?;
+        let a3 = (1..)
+            .take(24)
+            .collect::<ArrayBase<_, _>>()
+            .into_shape(shape)?;
 
         assert_eq!(a3.shape(), &shape.map(|x| x as usize));
 
@@ -1023,12 +1034,12 @@ mod tests {
         macro_rules! test {
             ($index:expr, $offset:expr) => {
                 let data = vec![1_usize, 2, 3, 4];
-                let a = Array::from(data.clone());
+                let a = ArrayBase::from(data.clone());
                 let subject = a.slice(SliceInfo::from(vec![ArrayIndex::from($index)]));
 
                 assert_eq!(subject.shape, vec![]);
                 assert_eq!(subject.strides, vec![]);
-                assert_eq!(subject.storage, StorageImpl::<Vec<_>>::from(data).view());
+                assert_eq!(subject.storage, StorageBase::<Vec<_>>::from(data).view());
                 assert_eq!(subject.offset, $offset);
             };
         }
@@ -1040,19 +1051,19 @@ mod tests {
     #[test]
     #[should_panic]
     fn slice_by_invalid_index() {
-        let a = Array::from(vec![1_usize, 2, 3, 4]);
+        let a = ArrayBase::from(vec![1_usize, 2, 3, 4]);
         a.slice(SliceInfo::from(vec![10.into()]));
     }
 
     #[test]
     fn slice_by_new_axis() {
         let data = vec![1_usize, 2, 3, 4];
-        let a = Array::from(data.clone());
+        let a = ArrayBase::from(data.clone());
         let subject = a.slice(SliceInfo::from(vec![NewAxis.into()]));
 
         assert_eq!(subject.shape, vec![1, 4]);
         assert_eq!(subject.strides, vec![0, 1]);
-        assert_eq!(subject.storage, StorageImpl::<Vec<_>>::from(data).view());
+        assert_eq!(subject.storage, StorageBase::<Vec<_>>::from(data).view());
         assert_eq!(subject.offset, 0);
     }
 
@@ -1061,14 +1072,14 @@ mod tests {
         macro_rules! test {
             ($r:expr, $step:expr, $len:expr, $offset:expr) => {
                 let data = vec![1_usize, 2, 3, 4, 5, 6, 7, 8];
-                let a = Array::from(data.clone());
+                let a = ArrayBase::from(data.clone());
                 let subject = a.slice(SliceInfo::from(vec![ArrayIndex::from(
                     Slice::from($r).step_by($step.try_into()?),
                 )]));
 
                 assert_eq!(subject.shape, vec![$len]);
                 assert_eq!(subject.strides, vec![$step]);
-                assert_eq!(subject.storage, StorageImpl::<Vec<_>>::from(data).view());
+                assert_eq!(subject.storage, StorageBase::<Vec<_>>::from(data).view());
                 assert_eq!(subject.offset, $offset);
             };
         }
@@ -1088,7 +1099,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn slice_by_too_many_indices() {
-        let a = Array::from(vec![1_usize, 2, 3, 4]);
+        let a = ArrayBase::from(vec![1_usize, 2, 3, 4]);
         a.slice(SliceInfo::from(vec![
             NewAxis.into(),
             1.into(),
@@ -1098,7 +1109,7 @@ mod tests {
 
     #[test]
     fn slice_sliced_array_by_slice() {
-        let a = Array::from(vec![1_usize; 32]);
+        let a = ArrayBase::from(vec![1_usize; 32]);
 
         assert_eq!(a.offset, 0);
 
@@ -1115,7 +1126,10 @@ mod tests {
     #[test]
     fn strides() -> Result<()> {
         let shape = [2_isize, 3, 4];
-        let a3 = (1..).take(24).collect::<Array<_, _>>().into_shape(shape)?;
+        let a3 = (1..)
+            .take(24)
+            .collect::<ArrayBase<_, _>>()
+            .into_shape(shape)?;
 
         assert_eq!(
             a3.strides(),
@@ -1127,7 +1141,10 @@ mod tests {
 
     #[test]
     fn transpose() -> Result<()> {
-        let a2 = (1..).take(6).collect::<Array<_, _>>().into_shape([2, 3])?;
+        let a2 = (1..)
+            .take(6)
+            .collect::<ArrayBase<_, _>>()
+            .into_shape([2, 3])?;
         let a2t = a2.transpose();
 
         assert_eq!(a2t.shape(), &[3, 2]);
@@ -1141,7 +1158,7 @@ mod tests {
     #[test]
     fn zeros() {
         let shape = [2, 3, 4];
-        let a3 = Array::<StorageImpl<Vec<u64>>, _>::zeros(&shape);
+        let a3 = ArrayBase::<StorageBase<Vec<u64>>, _>::zeros(&shape);
 
         assert_eq!(a3.shape(), &shape);
         assert!(a3.iter().all(|&x| x == 0));

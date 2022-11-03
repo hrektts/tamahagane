@@ -1,6 +1,6 @@
 use core::{default::Default, fmt};
 
-use super::Array;
+use super::ArrayBase;
 use crate::{dyn_s, storage::Storage, Dimensionality, NDArray, Order};
 
 const NUM_EDGE_ELEMENTS: usize = 3;
@@ -32,7 +32,7 @@ impl FormatOption {
 }
 
 fn format_array<S, D, O, F>(
-    array: &Array<S, D, O>,
+    array: &ArrayBase<S, D, O>,
     indent: usize,
     option: &FormatOption,
     f: &mut fmt::Formatter<'_>,
@@ -115,7 +115,7 @@ fn fmt_indent(i: usize, n_dims: usize, indent: usize, f: &mut fmt::Formatter<'_>
     Ok(())
 }
 
-impl<D, S> fmt::Binary for Array<S, D>
+impl<D, S> fmt::Binary for ArrayBase<S, D>
 where
     D: Dimensionality,
     S: Storage,
@@ -128,7 +128,7 @@ where
     }
 }
 
-impl<D, O, S> fmt::Debug for Array<S, D, O>
+impl<D, O, S> fmt::Debug for ArrayBase<S, D, O>
 where
     D: Dimensionality,
     O: Order,
@@ -149,7 +149,7 @@ where
     }
 }
 
-impl<D, S> fmt::Display for Array<S, D>
+impl<D, S> fmt::Display for ArrayBase<S, D>
 where
     D: Dimensionality,
     S: Storage,
@@ -162,7 +162,7 @@ where
     }
 }
 
-impl<D, S> fmt::LowerExp for Array<S, D>
+impl<D, S> fmt::LowerExp for ArrayBase<S, D>
 where
     D: Dimensionality,
     S: Storage,
@@ -175,7 +175,7 @@ where
     }
 }
 
-impl<D, S> fmt::LowerHex for Array<S, D>
+impl<D, S> fmt::LowerHex for ArrayBase<S, D>
 where
     D: Dimensionality,
     S: Storage,
@@ -188,7 +188,7 @@ where
     }
 }
 
-impl<D, S> fmt::Octal for Array<S, D>
+impl<D, S> fmt::Octal for ArrayBase<S, D>
 where
     D: Dimensionality,
     S: Storage,
@@ -201,7 +201,7 @@ where
     }
 }
 
-impl<D, S> fmt::Pointer for Array<S, D>
+impl<D, S> fmt::Pointer for ArrayBase<S, D>
 where
     D: Dimensionality,
     S: Storage,
@@ -214,7 +214,7 @@ where
     }
 }
 
-impl<D, S> fmt::UpperExp for Array<S, D>
+impl<D, S> fmt::UpperExp for ArrayBase<S, D>
 where
     D: Dimensionality,
     S: Storage,
@@ -227,7 +227,7 @@ where
     }
 }
 
-impl<D, S> fmt::UpperHex for Array<S, D>
+impl<D, S> fmt::UpperHex for ArrayBase<S, D>
 where
     D: Dimensionality,
     S: Storage,
@@ -245,11 +245,11 @@ mod tests {
     #[cfg(not(feature = "std"))]
     use alloc::{vec, vec::Vec};
 
-    use crate::{s, Array, NDArray, NDArrayOwned, Result};
+    use crate::{s, ArrayBase, NDArray, NDArrayOwned, Result};
 
     #[test]
     fn format_empty_arrays() -> Result<()> {
-        let a1 = Array::from(Vec::<usize>::new());
+        let a1 = ArrayBase::from(Vec::<usize>::new());
         let a2 = a1.to_shape([0, 0])?;
         let a3 = a1.to_shape([2, 0, 4])?;
 
@@ -262,7 +262,7 @@ mod tests {
 
     #[test]
     fn format_0d_array() {
-        let a1 = Array::from(vec![1_usize]);
+        let a1 = ArrayBase::from(vec![1_usize]);
         let a0 = a1.slice(s!(0));
 
         assert_eq!(format!("{}", a0), "1");
@@ -272,7 +272,7 @@ mod tests {
     fn format_1d_array() {
         const N: usize = super::TRUNCATION_THRESHOLD + 10;
         let data = vec![1; N];
-        let a1 = Array::from(data.clone());
+        let a1 = ArrayBase::from(data.clone());
 
         assert_eq!(format!("{}", a1), "[1, 1, 1, ..., 1, 1, 1]");
         assert_eq!(format!("{:#}", a1), format!("[{}]", ["1"; N].join(", ")));
@@ -280,7 +280,7 @@ mod tests {
 
     #[test]
     fn format_3d_array() -> Result<()> {
-        let a3 = Array::from(vec![1; 50 * 50 * 50]).into_shape([50, 50, 50])?;
+        let a3 = ArrayBase::from(vec![1; 50 * 50 * 50]).into_shape([50, 50, 50])?;
         let expected = "\
 [[[1, 1, 1, ..., 1, 1, 1],
   [1, 1, 1, ..., 1, 1, 1],
