@@ -1,16 +1,16 @@
 use crate::{Dimensionality, DimensionalityMax, Result, Shape, ShapeError};
 
 pub fn broadcast_shape<Lhs, Rhs>(
-    shape_0: &<Lhs as Dimensionality>::Shape,
-    shape_1: &<Rhs as Dimensionality>::Shape,
+    lhs_shape: &<Lhs as Dimensionality>::Shape,
+    rhs_shape: &<Rhs as Dimensionality>::Shape,
 ) -> Result<<<Lhs as DimensionalityMax<Rhs>>::Output as Dimensionality>::Shape>
 where
     Lhs: Dimensionality + DimensionalityMax<Rhs>,
     Rhs: Dimensionality,
 {
-    let n_dims_0 = shape_0.n_dims();
-    let n_dims_1 = shape_1.n_dims();
-    let mut ret = <Lhs as DimensionalityMax<Rhs>>::Output::shape_zeroed(n_dims_0.max(n_dims_1));
+    let lhs_n_dims = lhs_shape.ndims();
+    let rhs_n_dims = rhs_shape.ndims();
+    let mut ret = <Lhs as DimensionalityMax<Rhs>>::Output::shape_zeroed(lhs_n_dims.max(rhs_n_dims));
 
     let mut compose_shape = |long: &[usize], short: &[usize], diff: usize| -> Result<()> {
         for (dst, src) in ret.as_mut().iter_mut().zip(long.as_ref().iter().take(diff)) {
@@ -38,10 +38,18 @@ where
         Ok(())
     };
 
-    if n_dims_0 > n_dims_1 {
-        compose_shape(shape_0.as_ref(), shape_1.as_ref(), n_dims_0 - n_dims_1)?;
+    if lhs_n_dims > rhs_n_dims {
+        compose_shape(
+            lhs_shape.as_ref(),
+            rhs_shape.as_ref(),
+            lhs_n_dims - rhs_n_dims,
+        )?;
     } else {
-        compose_shape(shape_1.as_ref(), shape_0.as_ref(), n_dims_1 - n_dims_0)?;
+        compose_shape(
+            rhs_shape.as_ref(),
+            lhs_shape.as_ref(),
+            rhs_n_dims - lhs_n_dims,
+        )?;
     }
 
     Ok(ret)

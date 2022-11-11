@@ -3,9 +3,9 @@ use alloc::borrow::Cow;
 #[cfg(feature = "std")]
 use std::borrow::Cow;
 
-use super::{Storage, StorageImpl, StorageMut};
+use super::{Storage, StorageBase, StorageMut};
 
-impl<T> Storage for StorageImpl<&[T]>
+impl<T> Storage for StorageBase<&[T]>
 where
     T: Clone,
 {
@@ -20,15 +20,15 @@ where
     }
 
     fn cow(&self) -> <Self as Storage>::Cow<'_> {
-        StorageImpl(Cow::Borrowed(self.0))
+        StorageBase(Cow::Borrowed(self.0))
     }
 
     fn view(&self) -> <Self as Storage>::View<'_> {
-        StorageImpl(self.0)
+        StorageBase(self.0)
     }
 }
 
-impl<T> Storage for StorageImpl<&mut [T]>
+impl<T> Storage for StorageBase<&mut [T]>
 where
     T: Clone,
 {
@@ -43,15 +43,15 @@ where
     }
 
     fn cow(&self) -> <Self as Storage>::Cow<'_> {
-        StorageImpl(Cow::Borrowed(self.0))
+        StorageBase(Cow::Borrowed(self.0))
     }
 
     fn view(&self) -> <Self as Storage>::View<'_> {
-        StorageImpl(self.0)
+        StorageBase(self.0)
     }
 }
 
-impl<T> StorageMut for StorageImpl<&mut [T]>
+impl<T> StorageMut for StorageBase<&mut [T]>
 where
     T: Clone,
 {
@@ -64,6 +64,6 @@ where
     }
 
     fn view_mut(&mut self) -> <Self as StorageMut>::ViewMut<'_> {
-        StorageImpl(self.0)
+        StorageBase(self.0)
     }
 }

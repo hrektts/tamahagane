@@ -34,7 +34,7 @@ pub trait Shape:
         + PartialEq;
     fn array_len(&self) -> usize;
     fn as_associated_shape(&self) -> &<Self::Dimensionality as Dimensionality>::Shape;
-    fn n_dims(&self) -> usize;
+    fn ndims(&self) -> usize;
     fn to_default_strides<O>(&self) -> Self::Strides
     where
         O: Order;
@@ -52,7 +52,7 @@ impl<const N: usize> Shape for [usize; N] {
         self
     }
 
-    fn n_dims(&self) -> usize {
+    fn ndims(&self) -> usize {
         N
     }
 
@@ -78,7 +78,7 @@ impl Shape for Vec<usize> {
         self
     }
 
-    fn n_dims(&self) -> usize {
+    fn ndims(&self) -> usize {
         self.len()
     }
 
@@ -107,7 +107,7 @@ mod tests {
         let shape = [2_usize, 3, 4];
 
         assert_eq!(shape.array_len(), shape.iter().product());
-        assert_eq!(shape.n_dims(), shape.len());
+        assert_eq!(shape.ndims(), shape.len());
         assert_eq!(shape.to_default_strides::<RowMajor>(), [12, 4, 1]);
     }
 
@@ -116,7 +116,7 @@ mod tests {
         let shape = vec![2_usize, 3, 4];
 
         assert_eq!(shape.array_len(), shape.iter().product());
-        assert_eq!(shape.n_dims(), shape.len());
+        assert_eq!(shape.ndims(), shape.len());
         assert_eq!(shape.to_default_strides::<RowMajor>(), [12, 4, 1]);
     }
 }

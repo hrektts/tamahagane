@@ -1,6 +1,6 @@
 use core::{intrinsics, iter::FusedIterator, marker::PhantomData, mem, ptr::NonNull};
 
-use super::Array;
+use super::ArrayBase;
 use crate::{storage::Storage, Dimensionality, Shape};
 
 pub struct SequenceIter<'a, T: 'a, D>
@@ -69,7 +69,7 @@ where
     D: Dimensionality,
 {
     #[inline]
-    pub fn new<O, S>(a: &Array<S, D, O>, axis: usize) -> Self
+    pub fn new<O, S>(a: &ArrayBase<S, D, O>, axis: usize) -> Self
     where
         D: Dimensionality,
         S: Storage<Elem = T>,
@@ -160,7 +160,7 @@ mod tests {
     use alloc::vec::Vec;
 
     use super::SequenceIter;
-    use crate::{Array, NDArray, NDArrayOwned, Result, Storage};
+    use crate::{ArrayBase, NDArray, NDArrayOwned, Result, Storage};
 
     #[test]
     fn iterate_2d_array() -> Result<()> {
@@ -181,7 +181,7 @@ mod tests {
         }
 
         let data = (1..7).collect::<Vec<usize>>();
-        let a2 = Array::from(data.clone()).into_shape([2, 3])?;
+        let a2 = ArrayBase::from(data.clone()).into_shape([2, 3])?;
         {
             let axis_to_exclude = 0;
             let seq_iter = SequenceIter::new(&a2, axis_to_exclude);
@@ -215,7 +215,7 @@ mod tests {
     #[test]
     fn iterate_2d_zst_array() -> Result<()> {
         let data = [(); 6].to_vec();
-        let a2 = Array::from(data.clone()).into_shape([2, 3])?;
+        let a2 = ArrayBase::from(data.clone()).into_shape([2, 3])?;
         {
             let axis_to_exclude = 0;
             let seq_iter = SequenceIter::new(&a2, axis_to_exclude);

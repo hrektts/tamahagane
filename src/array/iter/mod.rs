@@ -3,7 +3,7 @@ pub use sequence::SequenceIter;
 
 use core::{iter::FusedIterator, marker::PhantomData, ptr::NonNull};
 
-use super::Array;
+use super::ArrayBase;
 use crate::{
     storage::{Storage, StorageMut},
     Dimensionality, Shape,
@@ -110,7 +110,7 @@ impl<'a, T, D> Iter<'a, T, D>
 where
     D: Dimensionality,
 {
-    pub(super) fn new<O, S>(a: &Array<S, D, O>) -> Self
+    pub(super) fn new<O, S>(a: &ArrayBase<S, D, O>) -> Self
     where
         D: Dimensionality,
         S: Storage<Elem = T>,
@@ -145,7 +145,7 @@ impl<'a, T, D> IterMut<'a, T, D>
 where
     D: Dimensionality,
 {
-    pub(super) fn new<S, O>(a: &mut Array<S, D, O>) -> Self
+    pub(super) fn new<S, O>(a: &mut ArrayBase<S, D, O>) -> Self
     where
         D: Dimensionality,
         S: StorageMut<Elem = T>,
@@ -170,8 +170,8 @@ mod tests {
     use super::{Iter, IterMut};
     use crate::{
         s,
-        storage::{Storage, StorageImpl},
-        Array, NDArray, NDArrayMut, NDArrayOwned, Result,
+        storage::{Storage, StorageBase},
+        ArrayBase, NDArray, NDArrayMut, NDArrayOwned, Result,
     };
 
     macro_rules! test_iterator_of_1d_array {
@@ -216,7 +216,7 @@ mod tests {
     #[test]
     fn iterate_1d_array() {
         let data = vec![1, 2, 3, 4];
-        let a1 = Array::from(data.clone());
+        let a1 = ArrayBase::from(data.clone());
 
         test_iterator_of_1d_array!(Iter, slice, [], a1, data);
     }
@@ -224,7 +224,7 @@ mod tests {
     #[test]
     fn iterate_1d_zst_array() {
         let data = vec![(), (), (), ()];
-        let a1 = Array::from(data.clone());
+        let a1 = ArrayBase::from(data.clone());
         {
             let mut counter = 0;
             for _ in Iter::new(&a1) {
@@ -238,14 +238,14 @@ mod tests {
     #[test]
     fn iterate_1d_array_mutably() {
         let data = vec![1, 2, 3, 4];
-        let mut a1 = Array::from(data.clone());
+        let mut a1 = ArrayBase::from(data.clone());
 
         test_iterator_of_1d_array!(IterMut, slice_mut, [mut], a1, data);
     }
 
     #[test]
     fn iterate_empty_array() {
-        let a = Array::<StorageImpl<Vec<u64>>, _>::zeros(&[1_usize, 0, 3]);
+        let a = ArrayBase::<StorageBase<Vec<u64>>, _>::zeros(&[1_usize, 0, 3]);
 
         assert!(a.iter().next().is_none());
     }
@@ -300,7 +300,7 @@ mod tests {
     #[test]
     fn iterate_nd_array() -> Result<()> {
         let data = (1..25).collect::<Vec<usize>>();
-        let a3 = Array::from(data.clone()).into_shape([2, 3, 4])?;
+        let a3 = ArrayBase::from(data.clone()).into_shape([2, 3, 4])?;
 
         test_iterator_of_nd_array!(Iter, slice, [], a3, data);
 
@@ -310,7 +310,7 @@ mod tests {
     #[test]
     fn iterate_nd_array_mutably() -> Result<()> {
         let data = (1..25).collect::<Vec<usize>>();
-        let mut a3 = Array::from(data.clone()).into_shape([2, 3, 4])?;
+        let mut a3 = ArrayBase::from(data.clone()).into_shape([2, 3, 4])?;
 
         test_iterator_of_nd_array!(IterMut, slice_mut, [mut], a3, data);
 

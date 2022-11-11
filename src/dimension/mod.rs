@@ -15,7 +15,7 @@ pub trait Dimensionality: DimensionalityAdd<DynDimDiff> {
         if shape.as_ref().iter().any(|&x| x == 0) {
             None
         } else {
-            Some(Self::shape_zeroed(shape.n_dims()))
+            Some(Self::shape_zeroed(shape.ndims()))
         }
     }
 }

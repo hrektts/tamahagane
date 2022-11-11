@@ -18,17 +18,17 @@ pub trait Storage {
     where
         Self: 'a,
         <Self as Storage>::Elem: 'a,
-    = StorageImpl<Cow<'a, [<Self as Storage>::Elem]>>;
+    = StorageBase<Cow<'a, [<Self as Storage>::Elem]>>;
     type Owned: FromIterator<<Self as Storage>::Elem>
         + StorageMut<Elem = <Self as Storage>::Elem>
-        + StorageOwned<Elem = <Self as Storage>::Elem> = StorageImpl<Vec<<Self as Storage>::Elem>>;
+        + StorageOwned<Elem = <Self as Storage>::Elem> = StorageBase<Vec<<Self as Storage>::Elem>>;
     type Shared: StorageOwned<Elem = <Self as Storage>::Elem> =
-        StorageImpl<Arc<Vec<<Self as Storage>::Elem>>>;
+        StorageBase<Arc<Vec<<Self as Storage>::Elem>>>;
     type View<'a>: Storage<Elem = <Self as Storage>::Elem>
     where
         Self: 'a,
         <Self as Storage>::Elem: 'a,
-    = StorageImpl<&'a [<Self as Storage>::Elem]>;
+    = StorageBase<&'a [<Self as Storage>::Elem]>;
     fn as_ptr(&self) -> *const <Self as Storage>::Elem;
     fn as_slice(&self) -> &[<Self as Storage>::Elem];
     fn cow(&self) -> <Self as Storage>::Cow<'_>;
@@ -41,7 +41,7 @@ pub trait StorageMut: Storage {
     where
         Self: 'a,
         <Self as Storage>::Elem: 'a,
-    = StorageImpl<&'a mut [<Self as Storage>::Elem]>;
+    = StorageBase<&'a mut [<Self as Storage>::Elem]>;
     fn as_mut_ptr(&mut self) -> *mut <Self as Storage>::Elem;
     fn as_mut_slice(&mut self) -> &mut [<Self as Storage>::Elem];
     fn view_mut(&mut self) -> <Self as StorageMut>::ViewMut<'_>;
@@ -58,4 +58,4 @@ pub trait StorageOwned: FromIterator<<Self as Storage>::Elem> + Storage {
 }
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq)]
-pub struct StorageImpl<B>(B);
+pub struct StorageBase<B>(B);

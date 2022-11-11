@@ -6,21 +6,21 @@ use std::borrow::Cow;
 
 use num_traits::{One, Zero};
 
-use super::{routine, Storage, StorageImpl, StorageMut, StorageOwned};
+use super::{routine, Storage, StorageBase, StorageMut, StorageOwned};
 
-impl<T> From<Vec<T>> for StorageImpl<Vec<T>> {
+impl<T> From<Vec<T>> for StorageBase<Vec<T>> {
     fn from(data: Vec<T>) -> Self {
         Self(data)
     }
 }
 
-impl<T> FromIterator<T> for StorageImpl<Vec<T>> {
+impl<T> FromIterator<T> for StorageBase<Vec<T>> {
     fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> Self {
         Self(FromIterator::from_iter(iter))
     }
 }
 
-impl<T> Storage for StorageImpl<Vec<T>>
+impl<T> Storage for StorageBase<Vec<T>>
 where
     T: Clone,
 {
@@ -35,15 +35,15 @@ where
     }
 
     fn cow(&self) -> <Self as Storage>::Cow<'_> {
-        StorageImpl(Cow::Borrowed(self.0.as_slice()))
+        StorageBase(Cow::Borrowed(self.0.as_slice()))
     }
 
     fn view(&self) -> <Self as Storage>::View<'_> {
-        StorageImpl(self.0.as_slice())
+        StorageBase(self.0.as_slice())
     }
 }
 
-impl<T> StorageMut for StorageImpl<Vec<T>>
+impl<T> StorageMut for StorageBase<Vec<T>>
 where
     T: Clone,
 {
@@ -56,17 +56,17 @@ where
     }
 
     fn view_mut(&mut self) -> <Self as StorageMut>::ViewMut<'_> {
-        StorageImpl(self.0.as_mut_slice())
+        StorageBase(self.0.as_mut_slice())
     }
 }
 
-impl<T> StorageOwned for StorageImpl<Vec<T>>
+impl<T> StorageOwned for StorageBase<Vec<T>>
 where
     T: Clone,
 {
     fn allocate_uninitialized(len: usize) -> Self {
         let buf = routine::create_uninitialized_buf(len);
-        StorageImpl(buf)
+        StorageBase(buf)
     }
 
     fn ones(len: usize) -> Self
@@ -74,7 +74,7 @@ where
         <Self as Storage>::Elem: One,
     {
         let buf = routine::create_buf(len, T::one());
-        StorageImpl(buf)
+        StorageBase(buf)
     }
 
     fn zeros(len: usize) -> Self
@@ -82,6 +82,6 @@ where
         <Self as Storage>::Elem: Zero,
     {
         let buf = routine::create_buf(len, T::zero());
-        StorageImpl(buf)
+        StorageBase(buf)
     }
 }

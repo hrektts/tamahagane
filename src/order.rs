@@ -29,7 +29,7 @@ impl Order for RowMajor {
     where
         S: Shape,
     {
-        debug_assert_eq!(shape.n_dims(), strides.as_ref().len());
+        debug_assert_eq!(shape.ndims(), strides.as_ref().len());
 
         strides
             .as_mut()
@@ -104,7 +104,7 @@ impl Order for ColumnMajor {
     where
         S: Shape,
     {
-        debug_assert_eq!(shape.n_dims(), strides.as_ref().len());
+        debug_assert_eq!(shape.ndims(), strides.as_ref().len());
 
         strides.as_mut().iter_mut().zip(shape.as_ref().iter()).fold(
             base_stride,

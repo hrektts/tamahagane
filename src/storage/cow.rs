@@ -4,9 +4,9 @@ use core::iter::FromIterator;
 #[cfg(feature = "std")]
 use std::borrow::Cow;
 
-use super::{Storage, StorageImpl, StorageMut};
+use super::{Storage, StorageBase, StorageMut};
 
-impl<T> FromIterator<T> for StorageImpl<Cow<'_, [T]>>
+impl<T> FromIterator<T> for StorageBase<Cow<'_, [T]>>
 where
     T: Clone,
 {
@@ -15,7 +15,7 @@ where
     }
 }
 
-impl<T> Storage for StorageImpl<Cow<'_, [T]>>
+impl<T> Storage for StorageBase<Cow<'_, [T]>>
 where
     T: Clone,
 {
@@ -34,15 +34,15 @@ where
             Cow::Borrowed(b) => Cow::Borrowed(*b),
             Cow::Owned(o) => Cow::Borrowed(o.as_slice()),
         };
-        StorageImpl(inner)
+        StorageBase(inner)
     }
 
     fn view(&self) -> <Self as Storage>::View<'_> {
-        StorageImpl(&self.0)
+        StorageBase(&self.0)
     }
 }
 
-impl<T> StorageMut for StorageImpl<Cow<'_, [T]>>
+impl<T> StorageMut for StorageBase<Cow<'_, [T]>>
 where
     T: Clone,
 {
@@ -55,6 +55,6 @@ where
     }
 
     fn view_mut(&mut self) -> <Self as StorageMut>::ViewMut<'_> {
-        StorageImpl(self.0.to_mut())
+        StorageBase(self.0.to_mut())
     }
 }

@@ -1,7 +1,7 @@
 use core::ops::{AddAssign, Mul};
 
 use crate::{
-    storage::Storage, Array, Dimensionality, DimensionalityAfterDot, Dot, NDArray, NDArrayMut,
+    storage::Storage, ArrayBase, Dimensionality, DimensionalityAfterDot, Dot, NDArray, NDArrayMut,
     NDArrayOwned, Order, Shape,
 };
 
@@ -22,11 +22,11 @@ macro_rules! impl_dot {
             T: NDArray<D = D1, O = O, S = S1>,
         {
             type Output =
-                Array<<S as Storage>::Owned, <D as DimensionalityAfterDot<D1>>::Output, O>;
+                ArrayBase<<S as Storage>::Owned, <D as DimensionalityAfterDot<D1>>::Output, O>;
 
             fn dot(&self, rhs: T) -> Self::Output {
-                let in_n_dims = self.n_dims();
-                let rhs_n_dims = rhs.n_dims();
+                let in_n_dims = self.ndims();
+                let rhs_n_dims = rhs.ndims();
 
                 if in_n_dims == 0 || rhs_n_dims == 0 {
                     panic!("dot products for 0-dimensional arrays are not supported");
@@ -82,26 +82,26 @@ macro_rules! impl_dot {
     };
 }
 
-impl_dot!(Array<S, D, O>);
-impl_dot!(&'a Array<S, D, O>);
-impl_dot!(&'a mut Array<S, D, O>);
+impl_dot!(ArrayBase<S, D, O>);
+impl_dot!(&'a ArrayBase<S, D, O>);
+impl_dot!(&'a mut ArrayBase<S, D, O>);
 
 #[cfg(test)]
 mod tests {
     #[cfg(not(feature = "std"))]
     use alloc::{vec, vec::Vec};
 
-    use crate::{s, storage::StorageImpl, Array, Dot, NDArray, NDArrayOwned};
+    use crate::{s, storage::StorageBase, ArrayBase, Dot, NDArray, NDArrayOwned};
 
     #[test]
     fn dot_2d() {
         let a = (1_usize..)
             .take(9)
-            .collect::<Array<_, _>>()
+            .collect::<ArrayBase<_, _>>()
             .into_shape([3, 3])
             .unwrap();
         let actual = a.dot(&a.transpose());
-        let expected = Array::from(vec![14, 32, 50, 32, 77, 122, 50, 122, 194])
+        let expected = ArrayBase::from(vec![14, 32, 50, 32, 77, 122, 50, 122, 194])
             .into_shape([3, 3])
             .unwrap();
 
@@ -112,11 +112,11 @@ mod tests {
     fn dot_4d() {
         let a = (1_usize..)
             .take(16)
-            .collect::<Array<_, _>>()
+            .collect::<ArrayBase<_, _>>()
             .into_shape([2, 2, 2, 2])
             .unwrap();
         let actual = a.dot(&a.transpose());
-        let expected = Array::from(vec![
+        let expected = ArrayBase::from(vec![
             11, 35, 17, 41, 14, 38, 20, 44, 23, 79, 37, 93, 30, 86, 44, 100, 35, 123, 57, 145, 46,
             134, 68, 156, 47, 167, 77, 197, 62, 182, 92, 212, 59, 211, 97, 249, 78, 230, 116, 268,
             71, 255, 117, 301, 94, 278, 140, 324, 83, 299, 137, 353, 110, 326, 164, 380, 95, 343,
@@ -132,12 +132,12 @@ mod tests {
     fn dot_of_view() {
         let a = (1_usize..)
             .take(9)
-            .collect::<Array<_, _>>()
+            .collect::<ArrayBase<_, _>>()
             .into_shape([3, 3])
             .unwrap();
         let view = a.slice(s![..;2, ..;2]);
         let actual = view.dot(&view.transpose());
-        let expected = Array::from(vec![10, 34, 34, 130])
+        let expected = ArrayBase::from(vec![10, 34, 34, 130])
             .into_shape([2, 2])
             .unwrap();
 
@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn dot_of_zeros() {
-        let a = Array::<StorageImpl<Vec<usize>>, _>::zeros(&[3, 3]);
+        let a = ArrayBase::<StorageBase<Vec<usize>>, _>::zeros(&[3, 3]);
 
         assert!(a.dot(&a).iter().all(|&x| x == 0));
     }
