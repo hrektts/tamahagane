@@ -102,7 +102,7 @@ macro_rules! impl_binary_op {
                         *dst = dst.clone().$op(src);
                     }
                     ArrayBase {
-                        strides: convert_strides::<D, D1>(&self.strides, out_shape.n_dims()),
+                        strides: convert_strides::<D, D1>(&self.strides, out_shape.ndims()),
                         shape: out_shape,
                         storage: self.storage,
                         offset: self.offset,
@@ -117,7 +117,7 @@ macro_rules! impl_binary_op {
                         *dst = dst.clone().$op(src);
                     }
                     ArrayBase {
-                        strides: convert_strides::<D, D1>(&self.strides, out_shape.n_dims()),
+                        strides: convert_strides::<D, D1>(&self.strides, out_shape.ndims()),
                         shape: out_shape,
                         storage: self.storage,
                         offset: self.offset,

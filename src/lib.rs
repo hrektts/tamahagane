@@ -77,7 +77,7 @@ pub trait NDArray {
         axis: usize,
     ) -> SequenceIter<'a, <Self::S as Storage>::Elem, Self::D>;
     fn len(&self) -> usize;
-    fn n_dims(&self) -> usize;
+    fn ndims(&self) -> usize;
     #[allow(clippy::type_complexity)]
     fn permute(
         &self,

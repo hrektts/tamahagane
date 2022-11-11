@@ -45,12 +45,12 @@ where
     S: Storage,
 {
     if array.is_empty() {
-        let n = array.n_dims();
+        let n = array.ndims();
         write!(f, "{}{}", "[".repeat(n), "]".repeat(n))?;
         return Ok(());
     }
 
-    match array.n_dims() {
+    match array.ndims() {
         0 => {
             for elem in array.iter() {
                 fmt(elem, f)?;

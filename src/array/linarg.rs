@@ -25,8 +25,8 @@ macro_rules! impl_dot {
                 ArrayBase<<S as Storage>::Owned, <D as DimensionalityAfterDot<D1>>::Output, O>;
 
             fn dot(&self, rhs: T) -> Self::Output {
-                let in_n_dims = self.n_dims();
-                let rhs_n_dims = rhs.n_dims();
+                let in_n_dims = self.ndims();
+                let rhs_n_dims = rhs.ndims();
 
                 if in_n_dims == 0 || rhs_n_dims == 0 {
                     panic!("dot products for 0-dimensional arrays are not supported");

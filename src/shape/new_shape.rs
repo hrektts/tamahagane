@@ -19,13 +19,13 @@ pub trait NewShape:
     + PartialEq
 {
     type Dimensionality: Dimensionality;
-    fn n_dims(&self) -> usize;
+    fn ndims(&self) -> usize;
 }
 
 impl<const N: usize> NewShape for [isize; N] {
     type Dimensionality = NDims<N>;
 
-    fn n_dims(&self) -> usize {
+    fn ndims(&self) -> usize {
         N
     }
 }
@@ -33,7 +33,7 @@ impl<const N: usize> NewShape for [isize; N] {
 impl NewShape for Vec<isize> {
     type Dimensionality = DynDim;
 
-    fn n_dims(&self) -> usize {
+    fn ndims(&self) -> usize {
         self.len()
     }
 }

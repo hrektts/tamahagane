@@ -78,7 +78,7 @@ macro_rules! impl_ndarray {
             where
                 BD: Dimensionality,
             {
-                if shape.n_dims() < self.shape.n_dims() {
+                if shape.ndims() < self.shape.ndims() {
                     return Err(ShapeError::IncompatibleDimension(
                         "cannot broadcast to smaller dimensions".into(),
                     )
@@ -115,27 +115,27 @@ macro_rules! impl_ndarray {
             }
 
             #[inline]
-            fn n_dims(&self) -> usize {
-                self.shape.n_dims()
+            fn ndims(&self) -> usize {
+                self.shape.ndims()
             }
 
             fn permute(
                 &self,
                 axes: <Self::D as Dimensionality>::Shape,
             ) -> Result<ArrayBase<<Self::S as Storage>::View<'_>, Self::D, Self::O>> {
-                if axes.n_dims() != self.n_dims() {
+                if axes.ndims() != self.ndims() {
                     return Err(
                         ShapeError::IncompatibleAxis("axes do not match array".into()).into(),
                     );
                 }
 
-                let mut counts = <D as Dimensionality>::shape_zeroed(axes.n_dims());
+                let mut counts = <D as Dimensionality>::shape_zeroed(axes.ndims());
                 for &axis in axes.as_ref() {
-                    if axis >= axes.n_dims() {
+                    if axis >= axes.ndims() {
                         return Err(ShapeError::IncompatibleAxis(format!(
                             "axis {} is out of bounds for array of dimension {}",
                             axis,
-                            self.n_dims()
+                            self.ndims()
                         ))
                         .into());
                     }
@@ -151,7 +151,7 @@ macro_rules! impl_ndarray {
                 }
 
                 let mut out_shape = counts;
-                let mut out_strides = <D as Dimensionality>::strides_zeroed(axes.n_dims());
+                let mut out_strides = <D as Dimensionality>::strides_zeroed(axes.ndims());
                 for (i, &axis) in axes.as_ref().iter().enumerate() {
                     out_shape[i] = self.shape[axis];
                     out_strides[i] = self.strides[axis];
@@ -231,7 +231,7 @@ macro_rules! impl_ndarray {
                 NO: Order,
                 NS: NewShape,
             {
-                if self.n_dims() == shape.n_dims()
+                if self.ndims() == shape.ndims()
                     && util::type_eq::<O, NO>()
                     && self
                         .shape
@@ -381,7 +381,7 @@ where
         NS: NewShape,
         NO: Order,
     {
-        if self.n_dims() == shape.n_dims()
+        if self.ndims() == shape.ndims()
             && util::type_eq::<O, NO>()
             && self
                 .shape
@@ -462,10 +462,10 @@ where
     where
         NS: NewShape,
     {
-        debug_assert_eq!(self.n_dims(), shape.n_dims());
+        debug_assert_eq!(self.ndims(), shape.ndims());
 
         let mut out_shape =
-            <<NS as NewShape>::Dimensionality as Dimensionality>::shape_zeroed(shape.n_dims());
+            <<NS as NewShape>::Dimensionality as Dimensionality>::shape_zeroed(shape.ndims());
         for (dest, src) in out_shape.as_mut().iter_mut().zip(self.shape.as_ref()) {
             *dest = *src;
         }
@@ -482,12 +482,12 @@ where
     where
         NS: NewShape,
     {
-        debug_assert_eq!(self.n_dims(), shape.n_dims());
+        debug_assert_eq!(self.ndims(), shape.ndims());
 
         let out_shape = self.convert_shape::<NS>(shape);
 
         let mut out_strides =
-            <<NS as NewShape>::Dimensionality as Dimensionality>::strides_zeroed(shape.n_dims());
+            <<NS as NewShape>::Dimensionality as Dimensionality>::strides_zeroed(shape.ndims());
         for (dest, src) in out_strides.as_mut().iter_mut().zip(self.strides.as_ref()) {
             *dest = *src;
         }
@@ -512,7 +512,7 @@ where
         ST: AsRef<[ArrayIndex]>,
     {
         let out_n_dims = {
-            let n_dims = self.n_dims();
+            let n_dims = self.ndims();
             let diff = info.dim_diff;
             let n_dims_indexed = info
                 .as_ref()
@@ -589,7 +589,7 @@ where
     where
         BD: Dimensionality,
     {
-        let mut strides = <BD as Dimensionality>::strides_zeroed(shape.n_dims());
+        let mut strides = <BD as Dimensionality>::strides_zeroed(shape.ndims());
         for ((stride, dim), (in_stride, in_dim)) in strides
             .as_mut()
             .iter_mut()
@@ -623,8 +623,8 @@ where
         let array_len = self.len();
         if array_len > 0 {
             let (reduced_shape, reduced_strides, reduced_n_dims) = {
-                let mut r_shape = <D as Dimensionality>::shape_zeroed(self.n_dims());
-                let mut r_strides = <D as Dimensionality>::strides_zeroed(self.n_dims());
+                let mut r_shape = <D as Dimensionality>::shape_zeroed(self.ndims());
+                let mut r_strides = <D as Dimensionality>::strides_zeroed(self.ndims());
 
                 if array_len == 1 {
                     r_shape[0] = 1;
@@ -671,7 +671,7 @@ where
         NS: NewShape,
     {
         let mut inferred =
-            <<NS as NewShape>::Dimensionality as Dimensionality>::shape_zeroed(shape.n_dims());
+            <<NS as NewShape>::Dimensionality as Dimensionality>::shape_zeroed(shape.ndims());
 
         for (i, &dim) in shape.as_ref().iter().enumerate() {
             if dim < 0 {
@@ -962,14 +962,14 @@ mod tests {
     }
 
     #[test]
-    fn n_dims() -> Result<()> {
+    fn ndims() -> Result<()> {
         let shape = [2_isize, 3, 4];
         let a3 = (1..)
             .take(24)
             .collect::<ArrayBase<_, _>>()
             .into_shape(shape)?;
 
-        assert_eq!(a3.n_dims(), shape.len());
+        assert_eq!(a3.ndims(), shape.len());
 
         Ok(())
     }
