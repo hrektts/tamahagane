@@ -53,7 +53,7 @@ macro_rules! impl_dot {
                         .as_ref()
                         .iter()
                         .take(in_n_dims - 1)
-                        .chain(rhs.shape().as_ref().iter().take(rhs_n_dims - 2)),
+                        .chain(rhs.shape().as_ref().iter().take(match_axis)),
                 ) {
                     *out_dim = *dim
                 }
@@ -92,6 +92,15 @@ mod tests {
     use alloc::{vec, vec::Vec};
 
     use crate::{s, storage::StorageBase, ArrayBase, Dot, NDArray, NDArrayOwned};
+
+    #[test]
+    fn dot_1d() {
+        let a = (1_usize..).take(3).collect::<ArrayBase<_, _>>();
+        let actual = a.dot(&a.transpose());
+        let expected = ArrayBase::from(vec![14]).slice(s![0]).to_owned_array();
+
+        assert_eq!(actual, expected);
+    }
 
     #[test]
     fn dot_2d() {
