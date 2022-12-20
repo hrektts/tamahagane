@@ -11,7 +11,6 @@ pub trait Order: 'static {
     ) -> bool
     where
         D: Dimensionality;
-    fn name<'a>() -> &'a str;
 
     fn convert_shape_to_default_strides<Sh>(shape: &Sh, strides: &mut Sh::Strides)
     where
@@ -90,10 +89,6 @@ impl Order for RowMajor {
 
         true
     }
-
-    fn name<'a>() -> &'a str {
-        r#""row major""#
-    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -154,10 +149,6 @@ impl Order for ColumnMajor {
         }
 
         true
-    }
-
-    fn name<'a>() -> &'a str {
-        r#""column major""#
     }
 }
 

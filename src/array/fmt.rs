@@ -1,4 +1,4 @@
-use core::{default::Default, fmt};
+use core::{any, default::Default, fmt};
 
 use super::ArrayBase;
 use crate::{dyn_s, storage::Storage, Dimensionality, NDArray, Order};
@@ -143,7 +143,7 @@ where
             ", shape={:?}, strides={:?}, order={}",
             self.shape,
             self.strides,
-            O::name(),
+            any::type_name::<O>().split("::").last().unwrap(),
         )?;
         Ok(())
     }
