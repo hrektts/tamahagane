@@ -4,14 +4,14 @@ pub trait Order: 'static {
     fn convert_shape_to_strides<Sh>(shape: &Sh, base_stride: isize, strides: &mut Sh::Strides)
     where
         Sh: Shape;
-    fn name<'a>() -> &'a str;
+    fn is_data_aligned_monotonically(shape: &[usize], strides: &[isize]) -> bool;
     fn is_data_contiguous<D>(
         shape: &<D as Dimensionality>::Shape,
         strides: &<<D as Dimensionality>::Shape as Shape>::Strides,
     ) -> bool
     where
         D: Dimensionality;
-    fn is_data_aligned_monotonically(shape: &[usize], strides: &[isize]) -> bool;
+    fn name<'a>() -> &'a str;
 
     fn convert_shape_to_default_strides<Sh>(shape: &Sh, strides: &mut Sh::Strides)
     where
@@ -41,8 +41,23 @@ impl Order for RowMajor {
             });
     }
 
-    fn name<'a>() -> &'a str {
-        r#""row major""#
+    fn is_data_aligned_monotonically(shape: &[usize], strides: &[isize]) -> bool {
+        let len = shape.len();
+        debug_assert_eq!(len, strides.len());
+
+        let mut stride_expected = shape[len - 1] as isize * strides[len - 1];
+        for (&dim, &stride) in shape[..len - 1]
+            .iter()
+            .rev()
+            .zip(strides[..len - 1].iter().rev())
+        {
+            if stride != stride_expected {
+                return false;
+            }
+            stride_expected *= dim as isize;
+        }
+
+        true
     }
 
     fn is_data_contiguous<D>(
@@ -76,23 +91,8 @@ impl Order for RowMajor {
         true
     }
 
-    fn is_data_aligned_monotonically(shape: &[usize], strides: &[isize]) -> bool {
-        let len = shape.len();
-        debug_assert_eq!(len, strides.len());
-
-        let mut stride_expected = shape[len - 1] as isize * strides[len - 1];
-        for (&dim, &stride) in shape[..len - 1]
-            .iter()
-            .rev()
-            .zip(strides[..len - 1].iter().rev())
-        {
-            if stride != stride_expected {
-                return false;
-            }
-            stride_expected *= dim as isize;
-        }
-
-        true
+    fn name<'a>() -> &'a str {
+        r#""row major""#
     }
 }
 
@@ -115,8 +115,19 @@ impl Order for ColumnMajor {
         );
     }
 
-    fn name<'a>() -> &'a str {
-        r#""column major""#
+    fn is_data_aligned_monotonically(shape: &[usize], strides: &[isize]) -> bool {
+        let len = shape.len();
+        debug_assert_eq!(len, strides.len());
+
+        let mut stride_expected = shape[0] as isize * strides[0];
+        for (&dim, &stride) in shape[1..].iter().zip(strides[1..].iter()) {
+            if stride != stride_expected {
+                return false;
+            }
+            stride_expected *= dim as isize;
+        }
+
+        true
     }
 
     fn is_data_contiguous<D>(
@@ -145,19 +156,8 @@ impl Order for ColumnMajor {
         true
     }
 
-    fn is_data_aligned_monotonically(shape: &[usize], strides: &[isize]) -> bool {
-        let len = shape.len();
-        debug_assert_eq!(len, strides.len());
-
-        let mut stride_expected = shape[0] as isize * strides[0];
-        for (&dim, &stride) in shape[1..].iter().zip(strides[1..].iter()) {
-            if stride != stride_expected {
-                return false;
-            }
-            stride_expected *= dim as isize;
-        }
-
-        true
+    fn name<'a>() -> &'a str {
+        r#""column major""#
     }
 }
 
@@ -166,22 +166,6 @@ mod tests {
     use crate::NDims;
 
     use super::{ColumnMajor, Order, RowMajor};
-
-    #[test]
-    fn convert_shape_to_stride_with_c_order() {
-        let mut strides = [0_isize; 3];
-        RowMajor::convert_shape_to_default_strides(&[2_usize, 3, 4], &mut strides);
-
-        assert_eq!(strides, [12, 4, 1]);
-    }
-
-    #[test]
-    fn convert_shape_to_stride_with_f_order() {
-        let mut strides = [0_isize; 3];
-        ColumnMajor::convert_shape_to_default_strides(&[2_usize, 3, 4], &mut strides);
-
-        assert_eq!(strides, [1, 2, 6]);
-    }
 
     #[test]
     fn check_whether_data_is_contiguous_with_c_order() {
@@ -205,5 +189,21 @@ mod tests {
             &[2, 3, 4],
             &[1, -2, 6]
         ));
+    }
+
+    #[test]
+    fn convert_shape_to_stride_with_c_order() {
+        let mut strides = [0_isize; 3];
+        RowMajor::convert_shape_to_default_strides(&[2_usize, 3, 4], &mut strides);
+
+        assert_eq!(strides, [12, 4, 1]);
+    }
+
+    #[test]
+    fn convert_shape_to_stride_with_f_order() {
+        let mut strides = [0_isize; 3];
+        ColumnMajor::convert_shape_to_default_strides(&[2_usize, 3, 4], &mut strides);
+
+        assert_eq!(strides, [1, 2, 6]);
     }
 }
