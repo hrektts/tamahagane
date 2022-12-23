@@ -521,9 +521,7 @@ where
                 .count();
             assert!(
                 n_dims_indexed <= n_dims,
-                "too many indices for array: array is {}-dimensional, but {} were indexed",
-                n_dims,
-                n_dims_indexed,
+                "too many indices for array: array is {n_dims}-dimensional, but {n_dims_indexed} were indexed",
             );
             (n_dims as isize + diff) as usize
         };
@@ -542,10 +540,7 @@ where
                     let dim = self.shape.as_ref()[in_idx] as isize;
                     assert!(
                         -dim <= *index && *index < dim,
-                        "index {} is out of bounds for axis {} with size {}",
-                        index,
-                        in_idx,
-                        dim,
+                        "index {index} is out of bounds for axis {in_idx} with size {dim}",
                     );
                     out_offset += self.strides.as_ref()[in_idx] * ((index + dim) % dim);
                     in_idx += 1;
