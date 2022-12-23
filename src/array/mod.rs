@@ -745,6 +745,8 @@ macro_rules! array {
         [$($n),*] as [isize; $dim]
     };
     ($($x:tt),*) => {{
+        use $crate::NDArrayOwned;
+
         let shape = array!(@shape $($x),*; [] 0);
         let iter = array!(@flatten $($x),*);
         iter.collect::<$crate::Array<_, _>>().into_shape(shape).unwrap()
