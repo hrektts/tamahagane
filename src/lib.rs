@@ -17,7 +17,7 @@
 extern crate alloc;
 
 mod array;
-pub use array::{ArrayBase, Iter, IterMut, SequenceIter};
+pub use array::{Array, ArrayBase, Iter, IterMut, SequenceIter};
 
 mod array_index;
 pub use array_index::{ArrayIndex, NewAxis};
@@ -51,9 +51,6 @@ pub use shape::{NewShape, Shape};
 mod util;
 
 pub mod storage;
-
-#[cfg(not(feature = "std"))]
-use alloc::vec::Vec;
 
 use num_traits::{One, Zero};
 
@@ -164,5 +161,3 @@ pub trait NDArrayOwned: NDArray {
         <Self::S as Storage>::Elem: Zero,
         Sh: Shape<Dimensionality = Self::D>;
 }
-
-pub type Array<T, D, O = RowMajor> = ArrayBase<storage::StorageBase<Vec<T>>, D, O>;
