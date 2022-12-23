@@ -91,11 +91,11 @@ mod tests {
     #[cfg(not(feature = "std"))]
     use alloc::{vec, vec::Vec};
 
-    use crate::{s, storage::StorageBase, ArrayBase, Dot, NDArray, NDArrayOwned};
+    use crate::{array, s, storage::StorageBase, ArrayBase, Dot, NDArray, NDArrayOwned};
 
     #[test]
     fn dot_1d() {
-        let a = (1_usize..).take(3).collect::<ArrayBase<_, _>>();
+        let a = array!([1, 2, 3]);
         let actual = a.dot(&a.transpose());
         let expected = ArrayBase::from(vec![14]).slice(s![0]).to_owned_array();
 
@@ -104,11 +104,7 @@ mod tests {
 
     #[test]
     fn dot_2d() {
-        let a = (1_usize..)
-            .take(9)
-            .collect::<ArrayBase<_, _>>()
-            .into_shape([3, 3])
-            .unwrap();
+        let a = array!([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
         let actual = a.dot(&a.transpose());
         let expected = ArrayBase::from(vec![14, 32, 50, 32, 77, 122, 50, 122, 194])
             .into_shape([3, 3])
@@ -139,11 +135,7 @@ mod tests {
 
     #[test]
     fn dot_of_view() {
-        let a = (1_usize..)
-            .take(9)
-            .collect::<ArrayBase<_, _>>()
-            .into_shape([3, 3])
-            .unwrap();
+        let a = array!([[1, 2, 3], [4, 5, 6], [7, 8, 9]]);
         let view = a.slice(s![..;2, ..;2]);
         let actual = view.dot(&view.transpose());
         let expected = ArrayBase::from(vec![10, 34, 34, 130])
