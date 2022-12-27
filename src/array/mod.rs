@@ -760,9 +760,10 @@ mod tests {
 
     use super::ArrayBase;
     use crate::{
+        s,
         storage::{Storage, StorageBase},
-        ArrayIndex, ColumnMajor, DynDim, NDArray, NDArrayMut, NDArrayOwned, NDims, NewAxis, Result,
-        RowMajor, Shape, Slice, SliceInfo,
+        ColumnMajor, DynDim, NDArray, NDArrayMut, NDArrayOwned, NDims, NewAxis, Result, RowMajor,
+        Shape,
     };
 
     #[test]
@@ -1152,10 +1153,10 @@ mod tests {
             ($index:expr, $offset:expr) => {
                 let data = vec![1_usize, 2, 3, 4];
                 let a = ArrayBase::from(data.clone());
-                let subject = a.slice(SliceInfo::from(vec![ArrayIndex::from($index)]));
+                let subject = a.slice(s!($index));
 
-                assert_eq!(subject.shape, vec![]);
-                assert_eq!(subject.strides, vec![]);
+                assert_eq!(subject.shape, []);
+                assert_eq!(subject.strides, []);
                 assert_eq!(subject.storage, StorageBase::<Vec<_>>::from(data).view());
                 assert_eq!(subject.offset, $offset);
             };
@@ -1169,17 +1170,17 @@ mod tests {
     #[should_panic]
     fn slice_by_invalid_index() {
         let a = array!([1, 2, 3, 4]);
-        a.slice(SliceInfo::from(vec![10.into()]));
+        a.slice(s!(10));
     }
 
     #[test]
     fn slice_by_new_axis() {
         let data = vec![1_usize, 2, 3, 4];
         let a = ArrayBase::from(data.clone());
-        let subject = a.slice(SliceInfo::from(vec![NewAxis.into()]));
+        let subject = a.slice(s!(NewAxis));
 
-        assert_eq!(subject.shape, vec![1, 4]);
-        assert_eq!(subject.strides, vec![0, 1]);
+        assert_eq!(subject.shape, [1, 4]);
+        assert_eq!(subject.strides, [0, 1]);
         assert_eq!(subject.storage, StorageBase::<Vec<_>>::from(data).view());
         assert_eq!(subject.offset, 0);
     }
@@ -1190,12 +1191,10 @@ mod tests {
             ($r:expr, $step:expr, $len:expr, $offset:expr) => {
                 let data = vec![1_usize, 2, 3, 4, 5, 6, 7, 8];
                 let a = ArrayBase::from(data.clone());
-                let subject = a.slice(SliceInfo::from(vec![ArrayIndex::from(
-                    Slice::from($r).step_by($step.try_into()?),
-                )]));
+                let subject = a.slice(s!($r;$step));
 
-                assert_eq!(subject.shape, vec![$len]);
-                assert_eq!(subject.strides, vec![$step]);
+                assert_eq!(subject.shape, [$len]);
+                assert_eq!(subject.strides, [$step]);
                 assert_eq!(subject.storage, StorageBase::<Vec<_>>::from(data).view());
                 assert_eq!(subject.offset, $offset);
             };
@@ -1217,11 +1216,7 @@ mod tests {
     #[should_panic]
     fn slice_by_too_many_indices() {
         let a = array!([1, 2, 3, 4]);
-        a.slice(SliceInfo::from(vec![
-            NewAxis.into(),
-            1.into(),
-            Slice::from(..2).into(),
-        ]));
+        a.slice(s!(NewAxis, 1, ..2));
     }
 
     #[test]
@@ -1230,7 +1225,7 @@ mod tests {
 
         assert_eq!(a.offset, 0);
 
-        let info = SliceInfo::from(vec![ArrayIndex::from(Slice::from(10..))]);
+        let info = s!(10..);
         let a1 = a.slice(info.clone());
 
         assert_eq!(a1.offset, 10);
