@@ -575,7 +575,10 @@ where
             out_strides.as_mut()[o] = self.strides.as_ref()[i];
         }
 
-        debug_assert!(0 <= out_offset && (out_offset as usize) < self.storage.as_slice().len());
+        debug_assert!(
+            self.storage.as_slice().is_empty()
+                || (0 <= out_offset && (out_offset as usize) < self.storage.as_slice().len())
+        );
         (out_offset as usize, out_shape, out_strides)
     }
 
@@ -1233,6 +1236,15 @@ mod tests {
         let a2 = a1.slice(info);
 
         assert_eq!(a2.offset, 20);
+    }
+
+    #[test]
+    fn slice_zero_length_array() {
+        let a: ArrayBase<StorageBase<Vec<usize>>, _> = array!([]).into_shape([0, 1, 2]).unwrap();
+        let subject = a.slice(s!(.., .., ..));
+
+        assert_eq!(subject.shape(), &[0, 1, 2]);
+        assert_eq!(subject.strides(), &[2, 2, 1]);
     }
 
     #[test]
