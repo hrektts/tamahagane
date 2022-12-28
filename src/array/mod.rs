@@ -1216,10 +1216,7 @@ mod tests {
     #[test]
     fn len() -> Result<()> {
         let shape = [2_isize, 3, 4];
-        let a3 = (1..)
-            .take(24)
-            .collect::<Array<_, _>>()
-            .into_shape(shape)?;
+        let a3 = (1..).take(24).collect::<Array<_, _>>().into_shape(shape)?;
 
         assert_eq!(a3.len(), shape.iter().map(|&x| x as usize).product());
 
@@ -1229,10 +1226,7 @@ mod tests {
     #[test]
     fn ndims() -> Result<()> {
         let shape = [2_isize, 3, 4];
-        let a3 = (1..)
-            .take(24)
-            .collect::<Array<_, _>>()
-            .into_shape(shape)?;
+        let a3 = (1..).take(24).collect::<Array<_, _>>().into_shape(shape)?;
 
         assert_eq!(a3.ndims(), shape.len());
 
@@ -1284,10 +1278,7 @@ mod tests {
     #[test]
     fn shape() -> Result<()> {
         let shape = [2_isize, 3, 4];
-        let a3 = (1..)
-            .take(24)
-            .collect::<Array<_, _>>()
-            .into_shape(shape)?;
+        let a3 = (1..).take(24).collect::<Array<_, _>>().into_shape(shape)?;
 
         assert_eq!(a3.shape(), &shape.map(|x| x as usize));
 
@@ -1394,10 +1385,7 @@ mod tests {
     #[test]
     fn strides() -> Result<()> {
         let shape = [2_isize, 3, 4];
-        let a3 = (1..)
-            .take(24)
-            .collect::<Array<_, _>>()
-            .into_shape(shape)?;
+        let a3 = (1..).take(24).collect::<Array<_, _>>().into_shape(shape)?;
 
         assert_eq!(
             a3.strides(),
