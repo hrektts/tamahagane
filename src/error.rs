@@ -8,6 +8,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 pub enum Error {
     Shape(ShapeError),
     TryFromInt(TryFromIntError),
+    Value(String),
 }
 
 impl From<ShapeError> for Error {

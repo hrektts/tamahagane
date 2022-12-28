@@ -140,6 +140,12 @@ pub trait NDArrayOwned: NDArray {
     fn allocate_uninitialized<Sh>(shape: &Sh) -> Self
     where
         Sh: Shape<Dimensionality = Self::D>;
+    fn concatenate<T>(arrays: &[T], axis: isize) -> Result<Self>
+    where
+        Self: Sized,
+        T: NDArray,
+        <<T as NDArray>::D as Dimensionality>::Shape: Shape<Dimensionality = Self::D>,
+        <T as NDArray>::S: Storage<Elem = <Self::S as Storage>::Elem>;
     fn into_shape<NS>(
         self,
         shape: NS,

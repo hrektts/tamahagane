@@ -7,6 +7,8 @@ mod linarg;
 
 mod ops;
 
+mod routine;
+
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 use core::{iter::FromIterator, marker::PhantomData};
@@ -15,8 +17,9 @@ use num_traits::{One, Zero};
 
 use crate::{
     storage::{Storage, StorageBase, StorageMut, StorageOwned},
-    util, ArrayIndex, Dimensionality, DimensionalityAdd, DimensionalityDiff, NDArray, NDArrayMut,
-    NDArrayOwned, NDims, NewShape, Order, Result, RowMajor, Shape, ShapeError, SliceInfo,
+    util, ArrayIndex, Dimensionality, DimensionalityAdd, DimensionalityDiff, Error, NDArray,
+    NDArrayMut, NDArrayOwned, NDims, NewShape, Order, Result, RowMajor, Shape, ShapeError,
+    SliceInfo,
 };
 
 #[derive(Clone, Hash, Eq, PartialEq)]
@@ -358,7 +361,7 @@ impl<D, O, S> NDArrayOwned for ArrayBase<S, D, O>
 where
     D: Dimensionality,
     O: Order,
-    S: StorageOwned,
+    S: StorageMut + StorageOwned,
 {
     type SO = S;
 
@@ -373,6 +376,77 @@ where
             offset: 0,
             phantom: PhantomData,
         }
+    }
+
+    fn concatenate<T>(arrays: &[T], axis: isize) -> Result<Self>
+    where
+        Self: Sized,
+        T: NDArray,
+        <<T as NDArray>::D as Dimensionality>::Shape: Shape<Dimensionality = Self::D>,
+        <T as NDArray>::S: Storage<Elem = <Self::S as Storage>::Elem>,
+    {
+        if arrays.is_empty() {
+            return Err(Error::Value(
+                "need at least one array to concatenate".into(),
+            ));
+        }
+
+        let n_dims = arrays[0].ndims();
+        if n_dims == 0 {
+            return Err(ShapeError::IncompatibleDimension(
+                "zero-dimensional arrays cannot be concatenated".into(),
+            )
+            .into());
+        }
+
+        let axis_normalized = routine::normalize_axis(axis, n_dims)?;
+        let mut shape = arrays[0].shape().clone();
+        if arrays.len() > 1 {
+            for array in arrays[1..].iter() {
+                if array.ndims() != n_dims {
+                    return Err(ShapeError::IncompatibleDimension(
+                        "all the input arrays must have same number of dimensions".into(),
+                    )
+                    .into());
+                }
+                for (i, (dim, d)) in shape
+                    .as_mut()
+                    .iter_mut()
+                    .zip(array.shape().as_ref().iter())
+                    .enumerate()
+                {
+                    if i == axis_normalized {
+                        *dim += *d;
+                    } else if dim != d {
+                        return Err(ShapeError::IncompatibleDimension("all the input array dimensions except for the concatenation axis must match exactly".into()).into());
+                    }
+                }
+            }
+        }
+
+        let mut out = Self::allocate_uninitialized(&shape);
+        let mut slice_idx = 0_isize;
+        for array in arrays {
+            let dim = array.shape()[axis_normalized] as isize;
+            let info = SliceInfo::from(
+                (0..n_dims)
+                    .map(|axis_idx| {
+                        if axis_idx == axis_normalized {
+                            ArrayIndex::from(slice_idx..slice_idx + dim)
+                        } else {
+                            ArrayIndex::from(..)
+                        }
+                    })
+                    .collect::<Vec<_>>(),
+            );
+            let mut view = out.slice_mut(info);
+            for (dst, src) in view.iter_mut().zip(array.iter()) {
+                *dst = src.clone();
+            }
+            slice_idx += dim;
+        }
+
+        Ok(out)
     }
 
     fn into_shape<NS>(
@@ -926,6 +1000,66 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[test]
+    fn concatenate() {
+        let a = (0_usize..6)
+            .collect::<Array<_, _>>()
+            .into_shape([1, 2, 3])
+            .unwrap();
+        {
+            let actual = Array::concatenate(&[a.view(), a.view()], 0).unwrap();
+            let expected = array!([[[0, 1, 2], [3, 4, 5]], [[0, 1, 2], [3, 4, 5]]]);
+
+            assert_eq!(actual, expected);
+        }
+        {
+            let actual = Array::concatenate(&[a.view(), a.view()], 1).unwrap();
+            let expected = array!([[[0, 1, 2], [3, 4, 5], [0, 1, 2], [3, 4, 5]]]);
+
+            assert_eq!(actual, expected);
+        }
+        {
+            let actual = Array::concatenate(&[a.view(), a.view()], 2).unwrap();
+            let expected = array!([[[0, 1, 2, 0, 1, 2], [3, 4, 5, 3, 4, 5]]]);
+
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
+    fn concatenate_arrays_of_different_order() {
+        let a = array!([[1, 2], [3, 4]]);
+        let concatenated: Array<_, _, ColumnMajor> =
+            Array::concatenate(&[a.view(), a.view()], 0).unwrap();
+        let actual = concatenated.storage;
+        let expected = crate::storage::StorageBase::<Vec<_>>::from(vec![1, 3, 1, 3, 2, 4, 2, 4]);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn concatenate_zero_length_arrays() {
+        let a: Array<usize, _> = array!([]).into_shape([1, 0, 2]).unwrap();
+        {
+            let actual = Array::concatenate(&[a.view(), a.view()], 0).unwrap();
+            let expected = array!([]).into_shape([2, 0, 2]).unwrap();
+
+            assert_eq!(actual, expected);
+        }
+        {
+            let actual = Array::concatenate(&[a.view(), a.view()], 1).unwrap();
+            let expected = array!([]).into_shape([1, 0, 2]).unwrap();
+
+            assert_eq!(actual, expected);
+        }
+        {
+            let actual = Array::concatenate(&[a.view(), a.view()], 2).unwrap();
+            let expected = array!([]).into_shape([1, 0, 4]).unwrap();
+
+            assert_eq!(actual, expected);
+        }
     }
 
     #[test]
