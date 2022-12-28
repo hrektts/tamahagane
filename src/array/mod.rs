@@ -286,6 +286,16 @@ macro_rules! impl_ndarray {
                     phantom: PhantomData,
                 }
             }
+
+            fn view(&self) -> ArrayBase<<Self::S as Storage>::View<'_>, Self::D, Self::O> {
+                ArrayBase {
+                    shape: self.shape.clone(),
+                    strides: self.strides.clone(),
+                    storage: self.storage.view(),
+                    offset: self.offset,
+                    phantom: PhantomData,
+                }
+            }
         }
     };
 }
@@ -1274,6 +1284,14 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    #[test]
+    fn view() {
+        let a = array!([1, 2, 3]);
+        let subject = a.view();
+
+        assert_eq!(subject.storage, a.storage.view());
     }
 
     #[test]

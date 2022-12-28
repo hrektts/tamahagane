@@ -111,6 +111,7 @@ pub trait NDArray {
         NO: Order,
         NS: NewShape;
     fn transpose(&self) -> ArrayBase<<Self::S as Storage>::View<'_>, Self::D, Self::O>;
+    fn view(&self) -> ArrayBase<<Self::S as Storage>::View<'_>, Self::D, Self::O>;
 }
 
 pub trait NDArrayMut: NDArray {
