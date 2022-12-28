@@ -7,6 +7,8 @@ mod linarg;
 
 mod ops;
 
+mod routine;
+
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 use core::{iter::FromIterator, marker::PhantomData};
@@ -15,8 +17,9 @@ use num_traits::{One, Zero};
 
 use crate::{
     storage::{Storage, StorageBase, StorageMut, StorageOwned},
-    util, ArrayIndex, Dimensionality, DimensionalityAdd, DimensionalityDiff, NDArray, NDArrayMut,
-    NDArrayOwned, NDims, NewShape, Order, Result, RowMajor, Shape, ShapeError, SliceInfo,
+    util, ArrayIndex, Dimensionality, DimensionalityAdd, DimensionalityDiff, Error, NDArray,
+    NDArrayMut, NDArrayOwned, NDims, NewShape, Order, Result, RowMajor, Shape, ShapeError,
+    SliceInfo,
 };
 
 #[derive(Clone, Hash, Eq, PartialEq)]
@@ -286,6 +289,16 @@ macro_rules! impl_ndarray {
                     phantom: PhantomData,
                 }
             }
+
+            fn view(&self) -> ArrayBase<<Self::S as Storage>::View<'_>, Self::D, Self::O> {
+                ArrayBase {
+                    shape: self.shape.clone(),
+                    strides: self.strides.clone(),
+                    storage: self.storage.view(),
+                    offset: self.offset,
+                    phantom: PhantomData,
+                }
+            }
         }
     };
 }
@@ -348,7 +361,7 @@ impl<D, O, S> NDArrayOwned for ArrayBase<S, D, O>
 where
     D: Dimensionality,
     O: Order,
-    S: StorageOwned,
+    S: StorageMut + StorageOwned,
 {
     type SO = S;
 
@@ -363,6 +376,77 @@ where
             offset: 0,
             phantom: PhantomData,
         }
+    }
+
+    fn concatenate<T>(arrays: &[T], axis: isize) -> Result<Self>
+    where
+        Self: Sized,
+        T: NDArray,
+        <<T as NDArray>::D as Dimensionality>::Shape: Shape<Dimensionality = Self::D>,
+        <T as NDArray>::S: Storage<Elem = <Self::S as Storage>::Elem>,
+    {
+        if arrays.is_empty() {
+            return Err(Error::Value(
+                "need at least one array to concatenate".into(),
+            ));
+        }
+
+        let n_dims = arrays[0].ndims();
+        if n_dims == 0 {
+            return Err(ShapeError::IncompatibleDimension(
+                "zero-dimensional arrays cannot be concatenated".into(),
+            )
+            .into());
+        }
+
+        let axis_normalized = routine::normalize_axis(axis, n_dims)?;
+        let mut shape = arrays[0].shape().clone();
+        if arrays.len() > 1 {
+            for array in arrays[1..].iter() {
+                if array.ndims() != n_dims {
+                    return Err(ShapeError::IncompatibleDimension(
+                        "all the input arrays must have same number of dimensions".into(),
+                    )
+                    .into());
+                }
+                for (i, (dim, d)) in shape
+                    .as_mut()
+                    .iter_mut()
+                    .zip(array.shape().as_ref().iter())
+                    .enumerate()
+                {
+                    if i == axis_normalized {
+                        *dim += *d;
+                    } else if dim != d {
+                        return Err(ShapeError::IncompatibleDimension("all the input array dimensions except for the concatenation axis must match exactly".into()).into());
+                    }
+                }
+            }
+        }
+
+        let mut out = Self::allocate_uninitialized(&shape);
+        let mut slice_idx = 0_isize;
+        for array in arrays {
+            let dim = array.shape()[axis_normalized] as isize;
+            let info = SliceInfo::from(
+                (0..n_dims)
+                    .map(|axis_idx| {
+                        if axis_idx == axis_normalized {
+                            ArrayIndex::from(slice_idx..slice_idx + dim)
+                        } else {
+                            ArrayIndex::from(..)
+                        }
+                    })
+                    .collect::<Vec<_>>(),
+            );
+            let mut view = out.slice_mut(info);
+            for (dst, src) in view.iter_mut().zip(array.iter()) {
+                *dst = src.clone();
+            }
+            slice_idx += dim;
+        }
+
+        Ok(out)
     }
 
     fn into_shape<NS>(
@@ -575,7 +659,10 @@ where
             out_strides.as_mut()[o] = self.strides.as_ref()[i];
         }
 
-        debug_assert!(0 <= out_offset && (out_offset as usize) < self.storage.as_slice().len());
+        debug_assert!(
+            self.storage.as_slice().is_empty()
+                || (0 <= out_offset && (out_offset as usize) < self.storage.as_slice().len())
+        );
         (out_offset as usize, out_shape, out_strides)
     }
 
@@ -758,17 +845,18 @@ mod tests {
     #[cfg(not(feature = "std"))]
     use alloc::vec::Vec;
 
-    use super::ArrayBase;
+    use super::Array;
     use crate::{
+        s,
         storage::{Storage, StorageBase},
-        ArrayIndex, ColumnMajor, DynDim, NDArray, NDArrayMut, NDArrayOwned, NDims, NewAxis, Result,
-        RowMajor, Shape, Slice, SliceInfo,
+        ColumnMajor, DynDim, NDArray, NDArrayMut, NDArrayOwned, NDims, NewAxis, Result, RowMajor,
+        Shape,
     };
 
     #[test]
     fn allocate_uninitialized() {
         let shape = [2, 3, 4];
-        let a3 = ArrayBase::<StorageBase<Vec<f64>>, _>::allocate_uninitialized(&shape);
+        let a3 = Array::<f64, _>::allocate_uninitialized(&shape);
 
         assert_eq!(a3.shape(), &shape);
     }
@@ -782,19 +870,19 @@ mod tests {
             assert_eq!(a.shape(), &[]);
         }
         {
-            let a: ArrayBase<StorageBase<Vec<usize>>, _> = array!([]);
+            let a: Array<usize, _> = array!([]);
             assert!(a.iter().is_empty());
             assert_eq!(a.ndims(), 1);
             assert_eq!(a.shape(), &[0]);
         }
         {
-            let a: ArrayBase<StorageBase<Vec<usize>>, _> = array!([[]]);
+            let a: Array<usize, _> = array!([[]]);
             assert!(a.iter().is_empty());
             assert_eq!(a.ndims(), 2);
             assert_eq!(a.shape(), &[1, 0]);
         }
         {
-            let a: ArrayBase<StorageBase<Vec<usize>>, _> = array!([[], []]);
+            let a: Array<usize, _> = array!([[], []]);
             assert!(a.iter().is_empty());
             assert_eq!(a.ndims(), 2);
             assert_eq!(a.shape(), &[2, 0]);
@@ -854,7 +942,7 @@ mod tests {
     fn broadcast_to_smaller_dimensions() {
         let a3 = (1..)
             .take(6)
-            .collect::<ArrayBase<_, _>>()
+            .collect::<Array<_, _>>()
             .into_shape([1, 2, 3])
             .unwrap();
         a3.broadcast_to::<NDims<2>>(&[2, 3]).unwrap();
@@ -865,7 +953,7 @@ mod tests {
     fn broadcast_to_invalid_shape() {
         let a3 = (1..)
             .take(6)
-            .collect::<ArrayBase<_, _>>()
+            .collect::<Array<_, _>>()
             .into_shape([1, 2, 3])
             .unwrap();
         a3.broadcast_to::<NDims<3>>(&[2, 3, 3]).unwrap();
@@ -873,7 +961,7 @@ mod tests {
 
     #[test]
     fn broadcast_to() -> Result<()> {
-        let a1 = ArrayBase::from(vec![1; 6]);
+        let a1 = Array::from(vec![1; 6]);
         {
             let a3 = a1.to_shape([1, 2, 3])?;
             {
@@ -915,16 +1003,76 @@ mod tests {
     }
 
     #[test]
+    fn concatenate() {
+        let a = (0_usize..6)
+            .collect::<Array<_, _>>()
+            .into_shape([1, 2, 3])
+            .unwrap();
+        {
+            let actual = Array::concatenate(&[a.view(), a.view()], 0).unwrap();
+            let expected = array!([[[0, 1, 2], [3, 4, 5]], [[0, 1, 2], [3, 4, 5]]]);
+
+            assert_eq!(actual, expected);
+        }
+        {
+            let actual = Array::concatenate(&[a.view(), a.view()], 1).unwrap();
+            let expected = array!([[[0, 1, 2], [3, 4, 5], [0, 1, 2], [3, 4, 5]]]);
+
+            assert_eq!(actual, expected);
+        }
+        {
+            let actual = Array::concatenate(&[a.view(), a.view()], 2).unwrap();
+            let expected = array!([[[0, 1, 2, 0, 1, 2], [3, 4, 5, 3, 4, 5]]]);
+
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
+    fn concatenate_arrays_of_different_order() {
+        let a = array!([[1, 2], [3, 4]]);
+        let concatenated: Array<_, _, ColumnMajor> =
+            Array::concatenate(&[a.view(), a.view()], 0).unwrap();
+        let actual = concatenated.storage;
+        let expected = crate::storage::StorageBase::<Vec<_>>::from(vec![1, 3, 1, 3, 2, 4, 2, 4]);
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn concatenate_zero_length_arrays() {
+        let a: Array<usize, _> = array!([]).into_shape([1, 0, 2]).unwrap();
+        {
+            let actual = Array::concatenate(&[a.view(), a.view()], 0).unwrap();
+            let expected = array!([]).into_shape([2, 0, 2]).unwrap();
+
+            assert_eq!(actual, expected);
+        }
+        {
+            let actual = Array::concatenate(&[a.view(), a.view()], 1).unwrap();
+            let expected = array!([]).into_shape([1, 0, 2]).unwrap();
+
+            assert_eq!(actual, expected);
+        }
+        {
+            let actual = Array::concatenate(&[a.view(), a.view()], 2).unwrap();
+            let expected = array!([]).into_shape([1, 0, 4]).unwrap();
+
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
     #[should_panic]
     fn convert_empty_array_to_ambiguous_shape() {
-        let a = ArrayBase::from(Vec::<usize>::new());
+        let a = Array::from(Vec::<usize>::new());
         a.to_shape([2, 0, -1]).unwrap();
     }
 
     #[test]
     #[should_panic]
     fn convert_empty_array_into_ambiguous_shape() {
-        let a = ArrayBase::from(Vec::<usize>::new());
+        let a = Array::from(Vec::<usize>::new());
         a.into_shape([2, 0, -1]).unwrap();
     }
 
@@ -958,7 +1106,7 @@ mod tests {
 
     #[test]
     fn convert_to_new_shape() -> Result<()> {
-        let a1 = (1..).take(24).collect::<ArrayBase<_, _>>();
+        let a1 = (1..).take(24).collect::<Array<_, _>>();
         {
             let new_shape = [2_isize, 3, 4];
             let shape = new_shape.map(|x| x as usize);
@@ -986,7 +1134,7 @@ mod tests {
     #[test]
     fn convert_into_new_shape() -> Result<()> {
         {
-            let a1 = (1..).take(24).collect::<ArrayBase<_, _>>();
+            let a1 = (1..).take(24).collect::<Array<_, _>>();
             let ptr = a1.storage.as_ptr();
             let new_shape = [2_isize, 3, 4];
             let shape = new_shape.map(|x| x as usize);
@@ -998,7 +1146,7 @@ mod tests {
             assert_eq!(a2.offset, 0);
         }
         {
-            let a1 = (1..).take(24).collect::<ArrayBase<_, _>>();
+            let a1 = (1..).take(24).collect::<Array<_, _>>();
             let ptr = a1.storage.as_ptr();
             let new_shape = [2_isize, 3, 4];
             let shape = new_shape.map(|x| x as usize);
@@ -1016,7 +1164,7 @@ mod tests {
     #[test]
     fn convert_to_the_same_shape() -> Result<()> {
         let data = vec![1_usize, 2, 3, 4];
-        let a = ArrayBase::from(data.clone());
+        let a = Array::from(data.clone());
         let subject = a.to_shape([4])?;
 
         assert_eq!(subject.shape, a.shape);
@@ -1030,7 +1178,7 @@ mod tests {
     #[test]
     fn convert_into_the_same_shape() -> Result<()> {
         let data = vec![1_usize, 2, 3, 4];
-        let a = ArrayBase::from(data.clone());
+        let a = Array::from(data.clone());
         let subject = a.into_shape([4])?;
 
         assert_eq!(subject.shape, [4]);
@@ -1045,7 +1193,7 @@ mod tests {
     fn fill() -> Result<()> {
         let mut a3 = (1..)
             .take(24)
-            .collect::<ArrayBase<_, _>>()
+            .collect::<Array<_, _>>()
             .into_shape([2, 3, 4])?;
         a3.fill(7);
 
@@ -1056,8 +1204,8 @@ mod tests {
 
     #[test]
     fn is_empty() -> Result<()> {
-        let a1 = ArrayBase::from(Vec::<usize>::new());
-        let a3 = ArrayBase::from(Vec::<usize>::new()).into_shape([3, 2, 0])?;
+        let a1 = Array::from(Vec::<usize>::new());
+        let a3 = Array::from(Vec::<usize>::new()).into_shape([3, 2, 0])?;
 
         assert!(a1.is_empty());
         assert!(a3.is_empty());
@@ -1068,10 +1216,7 @@ mod tests {
     #[test]
     fn len() -> Result<()> {
         let shape = [2_isize, 3, 4];
-        let a3 = (1..)
-            .take(24)
-            .collect::<ArrayBase<_, _>>()
-            .into_shape(shape)?;
+        let a3 = (1..).take(24).collect::<Array<_, _>>().into_shape(shape)?;
 
         assert_eq!(a3.len(), shape.iter().map(|&x| x as usize).product());
 
@@ -1081,10 +1226,7 @@ mod tests {
     #[test]
     fn ndims() -> Result<()> {
         let shape = [2_isize, 3, 4];
-        let a3 = (1..)
-            .take(24)
-            .collect::<ArrayBase<_, _>>()
-            .into_shape(shape)?;
+        let a3 = (1..).take(24).collect::<Array<_, _>>().into_shape(shape)?;
 
         assert_eq!(a3.ndims(), shape.len());
 
@@ -1094,7 +1236,7 @@ mod tests {
     #[test]
     fn ones() {
         let shape = [2, 3, 4];
-        let a3 = ArrayBase::<StorageBase<Vec<u64>>, _>::ones(&shape);
+        let a3 = Array::<u64, _>::ones(&shape);
 
         assert_eq!(a3.shape(), &shape);
         assert!(a3.iter().all(|&x| x == 1));
@@ -1102,7 +1244,7 @@ mod tests {
 
     #[test]
     fn permute() -> Result<()> {
-        let a3 = ArrayBase::from(vec![1; 24]).into_shape([2, 3, 4])?;
+        let a3 = Array::from(vec![1; 24]).into_shape([2, 3, 4])?;
         let a3p = a3.permute([2, 0, 1])?;
 
         assert_eq!(a3p.shape, [4, 2, 3]);
@@ -1115,31 +1257,28 @@ mod tests {
     #[test]
     #[should_panic]
     fn permute_by_axis_out_of_bounds() {
-        let a3 = ArrayBase::from(vec![1; 24]).into_shape([2, 3, 4]).unwrap();
+        let a3 = Array::from(vec![1; 24]).into_shape([2, 3, 4]).unwrap();
         a3.permute([0, 1, 100]).unwrap();
     }
 
     #[test]
     #[should_panic]
     fn permute_by_repeated_axes() {
-        let a3 = ArrayBase::from(vec![1; 24]).into_shape([2, 3, 4]).unwrap();
+        let a3 = Array::from(vec![1; 24]).into_shape([2, 3, 4]).unwrap();
         a3.permute([0, 1, 0]).unwrap();
     }
 
     #[test]
     #[should_panic]
     fn permute_by_wrong_number_of_axes() {
-        let a3 = ArrayBase::from(vec![1; 24]).into_shape([1, 2]).unwrap();
+        let a3 = Array::from(vec![1; 24]).into_shape([1, 2]).unwrap();
         a3.permute([1, 2]).unwrap();
     }
 
     #[test]
     fn shape() -> Result<()> {
         let shape = [2_isize, 3, 4];
-        let a3 = (1..)
-            .take(24)
-            .collect::<ArrayBase<_, _>>()
-            .into_shape(shape)?;
+        let a3 = (1..).take(24).collect::<Array<_, _>>().into_shape(shape)?;
 
         assert_eq!(a3.shape(), &shape.map(|x| x as usize));
 
@@ -1151,11 +1290,11 @@ mod tests {
         macro_rules! test {
             ($index:expr, $offset:expr) => {
                 let data = vec![1_usize, 2, 3, 4];
-                let a = ArrayBase::from(data.clone());
-                let subject = a.slice(SliceInfo::from(vec![ArrayIndex::from($index)]));
+                let a = Array::from(data.clone());
+                let subject = a.slice(s!($index));
 
-                assert_eq!(subject.shape, vec![]);
-                assert_eq!(subject.strides, vec![]);
+                assert_eq!(subject.shape, []);
+                assert_eq!(subject.strides, []);
                 assert_eq!(subject.storage, StorageBase::<Vec<_>>::from(data).view());
                 assert_eq!(subject.offset, $offset);
             };
@@ -1169,17 +1308,17 @@ mod tests {
     #[should_panic]
     fn slice_by_invalid_index() {
         let a = array!([1, 2, 3, 4]);
-        a.slice(SliceInfo::from(vec![10.into()]));
+        a.slice(s!(10));
     }
 
     #[test]
     fn slice_by_new_axis() {
         let data = vec![1_usize, 2, 3, 4];
-        let a = ArrayBase::from(data.clone());
-        let subject = a.slice(SliceInfo::from(vec![NewAxis.into()]));
+        let a = Array::from(data.clone());
+        let subject = a.slice(s!(NewAxis));
 
-        assert_eq!(subject.shape, vec![1, 4]);
-        assert_eq!(subject.strides, vec![0, 1]);
+        assert_eq!(subject.shape, [1, 4]);
+        assert_eq!(subject.strides, [0, 1]);
         assert_eq!(subject.storage, StorageBase::<Vec<_>>::from(data).view());
         assert_eq!(subject.offset, 0);
     }
@@ -1189,13 +1328,11 @@ mod tests {
         macro_rules! test {
             ($r:expr, $step:expr, $len:expr, $offset:expr) => {
                 let data = vec![1_usize, 2, 3, 4, 5, 6, 7, 8];
-                let a = ArrayBase::from(data.clone());
-                let subject = a.slice(SliceInfo::from(vec![ArrayIndex::from(
-                    Slice::from($r).step_by($step.try_into()?),
-                )]));
+                let a = Array::from(data.clone());
+                let subject = a.slice(s!($r;$step));
 
-                assert_eq!(subject.shape, vec![$len]);
-                assert_eq!(subject.strides, vec![$step]);
+                assert_eq!(subject.shape, [$len]);
+                assert_eq!(subject.strides, [$step]);
                 assert_eq!(subject.storage, StorageBase::<Vec<_>>::from(data).view());
                 assert_eq!(subject.offset, $offset);
             };
@@ -1217,20 +1354,16 @@ mod tests {
     #[should_panic]
     fn slice_by_too_many_indices() {
         let a = array!([1, 2, 3, 4]);
-        a.slice(SliceInfo::from(vec![
-            NewAxis.into(),
-            1.into(),
-            Slice::from(..2).into(),
-        ]));
+        a.slice(s!(NewAxis, 1, ..2));
     }
 
     #[test]
     fn slice_sliced_array_by_slice() {
-        let a = ArrayBase::from(vec![1_usize; 32]);
+        let a = Array::from(vec![1_usize; 32]);
 
         assert_eq!(a.offset, 0);
 
-        let info = SliceInfo::from(vec![ArrayIndex::from(Slice::from(10..))]);
+        let info = s!(10..);
         let a1 = a.slice(info.clone());
 
         assert_eq!(a1.offset, 10);
@@ -1241,12 +1374,18 @@ mod tests {
     }
 
     #[test]
+    fn slice_zero_length_array() {
+        let a: Array<usize, _> = array!([]).into_shape([0, 1, 2]).unwrap();
+        let subject = a.slice(s!(.., .., ..));
+
+        assert_eq!(subject.shape(), &[0, 1, 2]);
+        assert_eq!(subject.strides(), &[2, 2, 1]);
+    }
+
+    #[test]
     fn strides() -> Result<()> {
         let shape = [2_isize, 3, 4];
-        let a3 = (1..)
-            .take(24)
-            .collect::<ArrayBase<_, _>>()
-            .into_shape(shape)?;
+        let a3 = (1..).take(24).collect::<Array<_, _>>().into_shape(shape)?;
 
         assert_eq!(
             a3.strides(),
@@ -1270,9 +1409,17 @@ mod tests {
     }
 
     #[test]
+    fn view() {
+        let a = array!([1, 2, 3]);
+        let subject = a.view();
+
+        assert_eq!(subject.storage, a.storage.view());
+    }
+
+    #[test]
     fn zeros() {
         let shape = [2, 3, 4];
-        let a3 = ArrayBase::<StorageBase<Vec<u64>>, _>::zeros(&shape);
+        let a3 = Array::<u64, _>::zeros(&shape);
 
         assert_eq!(a3.shape(), &shape);
         assert!(a3.iter().all(|&x| x == 0));
