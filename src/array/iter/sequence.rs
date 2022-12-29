@@ -1,7 +1,6 @@
 use core::{intrinsics, iter::FusedIterator, marker::PhantomData, mem, ptr::NonNull};
 
-use super::ArrayBase;
-use crate::{storage::Storage, Dimensionality, Shape};
+use crate::{storage::Storage, Dimensionality, NDArray, Shape};
 
 pub struct SequenceIter<'a, T: 'a, D>
 where
@@ -69,24 +68,24 @@ where
     D: Dimensionality,
 {
     #[inline]
-    pub fn new<O, S>(a: &ArrayBase<S, D, O>, axis: usize) -> Self
+    pub fn new<S>(a: &impl NDArray<D = D, S = S>, axis: usize) -> Self
     where
         D: Dimensionality,
         S: Storage<Elem = T>,
     {
-        let ptr = a.storage.as_ptr().wrapping_add(a.offset);
-        let len = a.shape.array_len() / a.shape[axis];
-        let mut shape = a.shape.clone();
+        let ptr = a.as_ptr();
+        let len = a.shape().array_len() / a.shape()[axis];
+        let mut shape = a.shape().clone();
         shape[axis] = 0;
 
         Self {
             ptr: unsafe { NonNull::new_unchecked(ptr as *mut T) },
-            indices: D::first_indices(&a.shape),
+            indices: D::first_indices(a.shape()),
             len,
             shape,
-            strides: a.strides.clone(),
+            strides: a.strides().clone(),
             axis,
-            sequence_dim: a.shape[axis],
+            sequence_dim: a.shape()[axis],
             phantom: PhantomData,
         }
     }
