@@ -81,6 +81,7 @@ pub trait NDArray {
         Self: 'a,
         D2: Dimensionality;
 
+    fn as_ptr(&self) -> *const <Self::S as Storage>::Elem;
     fn broadcast_to<BD>(
         &self,
         shape: &<BD as Dimensionality>::Shape,

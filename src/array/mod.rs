@@ -11,7 +11,7 @@ mod routine;
 
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
-use core::{iter::FromIterator, marker::PhantomData};
+use core::{iter::FromIterator, marker::PhantomData, mem};
 
 use num_traits::{One, Zero};
 
@@ -96,6 +96,22 @@ macro_rules! impl_ndarray {
             where
                 Self: 'a,
                 D2: Dimensionality;
+
+            fn as_ptr(&self) -> *const <Self::S as Storage>::Elem {
+                let ptr = if self.storage.as_slice().is_empty() || mem::size_of::<<Self::S as Storage>::Elem>() == 0 {
+                    self.storage.as_ptr()
+                } else {
+                    self.storage.as_ptr().wrapping_add(self.offset)
+                };
+
+                debug_assert!(
+                    ptr >= self.storage.as_ptr()
+                        && (ptr < self.storage.as_ptr().wrapping_add(self.storage.as_slice().len())
+                            || ((self.is_empty() || mem::size_of::<<Self::S as Storage>::Elem>() == 0)
+                                && ptr == self.storage.as_ptr()))
+                );
+                ptr
+            }
 
             fn broadcast_to<BD>(
                 &self,
