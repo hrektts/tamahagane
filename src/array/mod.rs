@@ -64,6 +64,7 @@ where
     }
 }
 
+#[rustfmt::skip]
 macro_rules! impl_ndarray {
     ($type:ty) => {
         impl<D, O, S> NDArray for $type
@@ -75,11 +76,31 @@ macro_rules! impl_ndarray {
             type D = D;
             type O = O;
             type S = S;
+            type Iter<'a> = Iter<'a, <Self::S as Storage>::Elem, Self::D>
+            where
+                <Self::S as Storage>::Elem: 'a;
+            type CowWithD<'a, D2> = ArrayBase<<Self::S as Storage>::Cow<'a>, D2, Self::O>
+            where
+                Self: 'a,
+                D2: Dimensionality;
+            type CowWithDO<'a, D2, O2> = ArrayBase<<Self::S as Storage>::Cow<'a>, D2, O2>
+            where
+                Self: 'a,
+                D2: Dimensionality,
+                O2: Order;
+            type Owned = ArrayBase<<Self::S as Storage>::Owned, Self::D, Self::O>;
+            type View<'a> = ArrayBase<<Self::S as Storage>::View<'a>, Self::D, Self::O>
+            where
+                Self: 'a;
+            type ViewWithD<'a, D2> = ArrayBase<<Self::S as Storage>::View<'a>, D2, Self::O>
+            where
+                Self: 'a,
+                D2: Dimensionality;
 
             fn broadcast_to<BD>(
                 &self,
                 shape: &<BD as Dimensionality>::Shape,
-            ) -> Result<ArrayBase<<Self::S as Storage>::View<'_>, BD, Self::O>>
+            ) -> Result<Self::ViewWithD<'_, BD>>
             where
                 BD: Dimensionality,
             {
@@ -105,7 +126,7 @@ macro_rules! impl_ndarray {
             }
 
             #[inline]
-            fn iter<'a>(&self) -> Iter<'a, <Self::S as Storage>::Elem, Self::D> {
+            fn iter<'a>(&self) -> Self::Iter<'a> {
                 Iter::new(self)
             }
 
@@ -124,10 +145,7 @@ macro_rules! impl_ndarray {
                 self.shape.ndims()
             }
 
-            fn permute(
-                &self,
-                axes: <Self::D as Dimensionality>::Shape,
-            ) -> Result<ArrayBase<<Self::S as Storage>::View<'_>, Self::D, Self::O>> {
+            fn permute(&self, axes: <Self::D as Dimensionality>::Shape) -> Result<Self::View<'_>> {
                 if axes.ndims() != self.ndims() {
                     return Err(
                         ShapeError::IncompatibleAxis("axes do not match array".into()).into(),
@@ -174,11 +192,7 @@ macro_rules! impl_ndarray {
             fn slice<ST, SD>(
                 &self,
                 info: SliceInfo<ST, SD>,
-            ) -> ArrayBase<
-                <Self::S as Storage>::View<'_>,
-                <Self::D as DimensionalityAdd<SD>>::Output,
-                Self::O,
-            >
+            ) -> Self::ViewWithD<'_, <Self::D as DimensionalityAdd<SD>>::Output>
             where
                 Self::D: DimensionalityAdd<SD>,
                 SD: DimensionalityDiff,
@@ -204,7 +218,7 @@ macro_rules! impl_ndarray {
                 &self.strides
             }
 
-            fn to_owned_array(&self) -> ArrayBase<<Self::S as Storage>::Owned, Self::D, Self::O> {
+            fn to_owned_array(&self) -> Self::Owned {
                 ArrayBase {
                     shape: self.shape.clone(),
                     strides: self.shape.to_default_strides::<Self::O>(),
@@ -217,9 +231,7 @@ macro_rules! impl_ndarray {
             fn to_shape<NS>(
                 &self,
                 shape: NS,
-            ) -> Result<
-                ArrayBase<<Self::S as Storage>::Cow<'_>, <NS as NewShape>::Dimensionality, Self::O>,
-            >
+            ) -> Result<Self::CowWithD<'_, <NS as NewShape>::Dimensionality>>
             where
                 NS: NewShape,
             {
@@ -229,9 +241,7 @@ macro_rules! impl_ndarray {
             fn to_shape_with_order<NS, NO>(
                 &self,
                 shape: NS,
-            ) -> Result<
-                ArrayBase<<Self::S as Storage>::Cow<'_>, <NS as NewShape>::Dimensionality, NO>,
-            >
+            ) -> Result<Self::CowWithDO<'_, <NS as NewShape>::Dimensionality, NO>>
             where
                 NO: Order,
                 NS: NewShape,
@@ -275,7 +285,7 @@ macro_rules! impl_ndarray {
                 }
             }
 
-            fn transpose(&self) -> ArrayBase<<Self::S as Storage>::View<'_>, Self::D, Self::O> {
+            fn transpose(&self) -> Self::View<'_> {
                 let mut shape = self.shape.clone();
                 shape.as_mut().reverse();
                 let mut strides = self.strides.clone();
@@ -290,7 +300,7 @@ macro_rules! impl_ndarray {
                 }
             }
 
-            fn view(&self) -> ArrayBase<<Self::S as Storage>::View<'_>, Self::D, Self::O> {
+            fn view(&self) -> Self::View<'_> {
                 ArrayBase {
                     shape: self.shape.clone(),
                     strides: self.strides.clone(),
@@ -307,6 +317,7 @@ impl_ndarray!(ArrayBase<S, D, O>);
 impl_ndarray!(&ArrayBase<S, D, O>);
 impl_ndarray!(&mut ArrayBase<S, D, O>);
 
+#[rustfmt::skip]
 macro_rules! impl_ndarray_mut {
     ($type:ty) => {
         impl<D, O, S> NDArrayMut for $type
@@ -315,7 +326,10 @@ macro_rules! impl_ndarray_mut {
             O: Order,
             S: StorageMut,
         {
-            type SM = S;
+            type ViewMutWithD<'a, D2> = ArrayBase<<Self::S as StorageMut>::ViewMut<'a>, D2, Self::O>
+            where
+                Self: 'a,
+                D2: Dimensionality;
 
             fn fill(&mut self, value: <Self::S as Storage>::Elem) {
                 for elem in self.iter_mut() {
@@ -331,11 +345,7 @@ macro_rules! impl_ndarray_mut {
             fn slice_mut<ST, SD>(
                 &mut self,
                 info: SliceInfo<ST, SD>,
-            ) -> ArrayBase<
-                <Self::SM as StorageMut>::ViewMut<'_>,
-                <Self::D as DimensionalityAdd<SD>>::Output,
-                Self::O,
-            >
+            ) -> Self::ViewMutWithD<'_, <Self::D as DimensionalityAdd<SD>>::Output>
             where
                 Self::D: DimensionalityAdd<SD>,
                 SD: DimensionalityDiff,
@@ -363,7 +373,7 @@ where
     O: Order,
     S: StorageMut + StorageOwned,
 {
-    type SO = S;
+    type WithD<D2> = ArrayBase<Self::S, D2, Self::O> where D2: Dimensionality;
 
     fn allocate_uninitialized<Sh>(shape: &Sh) -> Self
     where
@@ -372,7 +382,7 @@ where
         ArrayBase {
             shape: shape.as_associated_shape().clone(),
             strides: shape.as_associated_shape().to_default_strides::<O>(),
-            storage: Self::SO::allocate_uninitialized(shape.as_associated_shape().array_len()),
+            storage: Self::S::allocate_uninitialized(shape.as_associated_shape().array_len()),
             offset: 0,
             phantom: PhantomData,
         }
@@ -449,10 +459,7 @@ where
         Ok(out)
     }
 
-    fn into_shape<NS>(
-        self,
-        shape: NS,
-    ) -> Result<ArrayBase<Self::S, <NS as NewShape>::Dimensionality, Self::O>>
+    fn into_shape<NS>(self, shape: NS) -> Result<Self::WithD<<NS as NewShape>::Dimensionality>>
     where
         NS: NewShape,
     {
@@ -462,7 +469,7 @@ where
     fn into_shape_with_order<NS, NO>(
         self,
         shape: NS,
-    ) -> Result<ArrayBase<Self::S, <NS as NewShape>::Dimensionality, NO>>
+    ) -> Result<Self::WithD<<NS as NewShape>::Dimensionality>>
     where
         NS: NewShape,
         NO: Order,
