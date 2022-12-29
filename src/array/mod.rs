@@ -1,7 +1,7 @@
 mod fmt;
 
 mod iter;
-pub use iter::{Iter, IterMut, SequenceIter};
+pub use iter::{Iter, IterMut};
 
 mod linarg;
 
@@ -144,11 +144,6 @@ macro_rules! impl_ndarray {
             #[inline]
             fn iter<'a>(&self) -> Self::Iter<'a> {
                 Iter::new(self)
-            }
-
-            #[inline]
-            fn iter_sequence<'a>(&self, axis: usize) -> SequenceIter<'a, <S as Storage>::Elem, D> {
-                SequenceIter::new(self, axis)
             }
 
             #[inline]

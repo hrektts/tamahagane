@@ -17,7 +17,7 @@
 extern crate alloc;
 
 mod array;
-pub use array::{Array, ArrayBase, Iter, IterMut, SequenceIter};
+pub use array::{Array, ArrayBase, Iter, IterMut};
 
 mod array_index;
 pub use array_index::{ArrayIndex, NewAxis};
@@ -90,10 +90,6 @@ pub trait NDArray {
         BD: Dimensionality;
     fn is_empty(&self) -> bool;
     fn iter<'a>(&self) -> Self::Iter<'a>;
-    fn iter_sequence<'a>(
-        &self,
-        axis: usize,
-    ) -> SequenceIter<'a, <Self::S as Storage>::Elem, Self::D>;
     fn len(&self) -> usize;
     fn ndims(&self) -> usize;
     fn permute(&self, axes: <Self::D as Dimensionality>::Shape) -> Result<Self::View<'_>>;

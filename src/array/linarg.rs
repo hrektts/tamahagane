@@ -1,8 +1,8 @@
 use core::ops::{AddAssign, Mul};
 
 use crate::{
-    storage::Storage, ArrayBase, Dimensionality, DimensionalityAfterDot, Dot, NDArray, NDArrayMut,
-    NDArrayOwned, Order, Shape,
+    array::iter::SequenceIter, storage::Storage, ArrayBase, Dimensionality, DimensionalityAfterDot,
+    Dot, NDArray, NDArrayMut, NDArrayOwned, Order, Shape,
 };
 
 macro_rules! impl_dot {
@@ -63,8 +63,10 @@ macro_rules! impl_dot {
 
                 let mut out = Self::Output::allocate_uninitialized(&out_shape);
                 let mut out_iter = out.iter_mut();
-                for in_iter in self.iter_sequence(in_n_dims - 1) {
-                    for rhs_iter in rhs.iter_sequence(match_axis) {
+                let in_iters = SequenceIter::new(self, in_n_dims - 1);
+                for in_iter in in_iters {
+                    let rhs_iters = SequenceIter::new(&rhs, match_axis);
+                    for rhs_iter in rhs_iters {
                         if let Some(out_elem) = out_iter.next() {
                             let mut it = in_iter.clone().zip(rhs_iter);
                             if let Some((in_elem, rhs_elem)) = it.next() {
