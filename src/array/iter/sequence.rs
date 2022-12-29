@@ -74,7 +74,11 @@ where
         S: Storage<Elem = T>,
     {
         let ptr = a.as_ptr();
-        let len = a.shape().array_len() / a.shape()[axis];
+        let len = if a.is_empty() {
+            0
+        } else {
+            a.shape().array_len() / a.shape()[axis]
+        };
         let mut shape = a.shape().clone();
         shape[axis] = 0;
 
