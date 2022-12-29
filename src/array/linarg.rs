@@ -1,5 +1,7 @@
 use core::ops::{AddAssign, Mul};
 
+use num_traits::Zero;
+
 use crate::{
     array::iter::SequenceIter, storage::Storage, ArrayBase, Dimensionality, DimensionalityAfterDot,
     Dot, NDArray, NDArrayMut, NDArrayOwned, Order, Shape,
@@ -15,7 +17,7 @@ macro_rules! impl_dot {
             D1: Dimensionality,
             O: Order,
             S: Storage,
-            <S as Storage>::Elem: AddAssign<<S as Storage>::Elem> + 'a,
+            <S as Storage>::Elem: AddAssign<<S as Storage>::Elem> + Zero + 'a,
             &'a <S as Storage>::Elem: Mul<&'b <S1 as Storage>::Elem, Output = <S as Storage>::Elem>,
             S1: Storage,
             <S1 as Storage>::Elem: 'b,
@@ -61,7 +63,7 @@ macro_rules! impl_dot {
                     out_shape[out_n_dims - 1] = rhs.shape()[rhs_n_dims - 1];
                 }
 
-                let mut out = Self::Output::allocate_uninitialized(&out_shape);
+                let mut out = Self::Output::zeros(&out_shape);
                 let mut out_iter = out.iter_mut();
                 let in_iters = SequenceIter::new(self, in_n_dims - 1);
                 for in_iter in in_iters {
@@ -152,5 +154,13 @@ mod tests {
         let a = ArrayBase::<StorageBase<Vec<usize>>, _>::zeros(&[3, 3]);
 
         assert!(a.dot(&a).iter().all(|&x| x == 0));
+    }
+
+    #[test]
+    fn dot_of_zero_length_arrays() {
+        let a: ArrayBase<StorageBase<Vec<usize>>, _> = array!([]).into_shape([2, 0]).unwrap();
+        let b: ArrayBase<StorageBase<Vec<usize>>, _> = array!([]).into_shape([0, 2]).unwrap();
+
+        assert_eq!(a.dot(&b), array!([[0, 0], [0, 0]]));
     }
 }
