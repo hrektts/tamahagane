@@ -80,7 +80,6 @@ pub trait NDArray {
     where
         Self: 'a,
         D2: Dimensionality;
-
     fn as_ptr(&self) -> *const <Self::S as Storage>::Elem;
     fn broadcast_to<BD>(
         &self,
@@ -143,7 +142,6 @@ where
     where
         Self: 'a,
         D2: Dimensionality;
-
     fn fill(&mut self, value: <Self::S as Storage>::Elem);
     fn iter_mut<'a>(&mut self) -> IterMut<'a, <Self::S as Storage>::Elem, Self::D>;
     #[allow(clippy::type_complexity)]
@@ -164,7 +162,6 @@ where
     type WithD<D2>: NDArrayOwned<D = D2, O = Self::O, S = Self::S>
     where
         D2: Dimensionality;
-
     fn allocate_uninitialized<Sh>(shape: &Sh) -> Self
     where
         Sh: Shape<Dimensionality = Self::D>;
