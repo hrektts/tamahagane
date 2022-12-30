@@ -88,6 +88,15 @@ pub trait NDArray {
     ) -> Result<Self::ViewWithD<'_, BD>>
     where
         BD: Dimensionality;
+    #[allow(clippy::type_complexity)]
+    fn expand_shape(
+        &self,
+        axis: isize,
+    ) -> Result<Self::CowWithD<'_, <<
+        <Self::D as DimensionalityAdd<NDims<1>>>::Output
+            as Dimensionality>::SignedShape as SignedShape>::Dimensionality>>
+    where
+        Self::D: DimensionalityAdd<NDims<1>>;
     fn is_empty(&self) -> bool;
     fn iter<'a>(&self) -> Self::Iter<'a>;
     fn len(&self) -> usize;

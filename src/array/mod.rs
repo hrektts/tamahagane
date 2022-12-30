@@ -136,6 +136,33 @@ macro_rules! impl_ndarray {
                 })
             }
 
+            fn expand_shape(
+                &self,
+                axis: isize,
+            ) -> Result<Self::CowWithD<'_, <<
+                <Self::D as DimensionalityAdd<NDims<1>>>::Output
+                    as Dimensionality>::SignedShape as SignedShape>::Dimensionality>>
+            where
+                Self::D: DimensionalityAdd<NDims<1>>,
+            {
+                let n_dims = self.ndims();
+                let axis_normalized = routine::normalize_axis(axis, n_dims)?;
+                let mut out_shape =
+                    <Self::D as DimensionalityAdd<NDims<1>>>::Output::signed_shape_zeroed(n_dims);
+                for (out_dim, dim) in out_shape.as_mut().iter_mut().zip(
+                    self.shape()
+                        .as_ref()
+                        .iter()
+                        .take(axis_normalized)
+                        .chain([1].iter())
+                        .chain(self.shape().as_ref().iter().skip(axis_normalized)),
+                ) {
+                    *out_dim = *dim as isize;
+                }
+
+                self.to_shape(out_shape)
+            }
+
             #[inline]
             fn is_empty(&self) -> bool {
                 self.len() == 0
