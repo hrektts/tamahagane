@@ -46,7 +46,7 @@ mod slice_info;
 pub use slice_info::SliceInfo;
 
 mod shape;
-pub use shape::{NewShape, Shape};
+pub use shape::{Shape, SignedShape};
 
 mod util;
 
@@ -105,19 +105,19 @@ pub trait NDArray {
         ST: AsRef<[ArrayIndex]>;
     fn strides(&self) -> &<<Self::D as Dimensionality>::Shape as Shape>::Strides;
     fn to_owned_array(&self) -> Self::Owned;
-    fn to_shape<NS>(
+    fn to_shape<Sh2>(
         &self,
-        shape: NS,
-    ) -> Result<Self::CowWithD<'_, <NS as NewShape>::Dimensionality>>
+        shape: Sh2,
+    ) -> Result<Self::CowWithD<'_, <Sh2 as SignedShape>::Dimensionality>>
     where
-        NS: NewShape;
-    fn to_shape_with_order<NS, NO>(
+        Sh2: SignedShape;
+    fn to_shape_with_order<Sh2, O2>(
         &self,
-        shape: NS,
-    ) -> Result<Self::CowWithDO<'_, <NS as NewShape>::Dimensionality, NO>>
+        shape: Sh2,
+    ) -> Result<Self::CowWithDO<'_, <Sh2 as SignedShape>::Dimensionality, O2>>
     where
-        NO: Order,
-        NS: NewShape;
+        O2: Order,
+        Sh2: SignedShape;
     fn transpose(&self) -> Self::View<'_>;
     fn view(&self) -> Self::View<'_>;
 }
@@ -165,16 +165,19 @@ where
         T: NDArray,
         <<T as NDArray>::D as Dimensionality>::Shape: Shape<Dimensionality = Self::D>,
         <T as NDArray>::S: Storage<Elem = <Self::S as Storage>::Elem>;
-    fn into_shape<NS>(self, shape: NS) -> Result<Self::WithD<<NS as NewShape>::Dimensionality>>
-    where
-        NS: NewShape;
-    fn into_shape_with_order<NS, NO>(
+    fn into_shape<Sh2>(
         self,
-        shape: NS,
-    ) -> Result<Self::WithD<<NS as NewShape>::Dimensionality>>
+        shape: Sh2,
+    ) -> Result<Self::WithD<<Sh2 as SignedShape>::Dimensionality>>
     where
-        NO: Order,
-        NS: NewShape;
+        Sh2: SignedShape;
+    fn into_shape_with_order<Sh2, O2>(
+        self,
+        shape: Sh2,
+    ) -> Result<Self::WithD<<Sh2 as SignedShape>::Dimensionality>>
+    where
+        O2: Order,
+        Sh2: SignedShape;
     fn ones<Sh>(shape: &Sh) -> Self
     where
         <Self::S as Storage>::Elem: One,
