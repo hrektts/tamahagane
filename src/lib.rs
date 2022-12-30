@@ -46,7 +46,7 @@ mod slice_info;
 pub use slice_info::SliceInfo;
 
 mod shape;
-pub use shape::{Shape, SignedShape};
+pub use shape::{NewShape, Shape};
 
 mod util;
 
@@ -80,6 +80,7 @@ pub trait NDArray {
     where
         Self: 'a,
         D2: Dimensionality;
+
     fn as_ptr(&self) -> *const <Self::S as Storage>::Elem;
     fn broadcast_to<BD>(
         &self,
@@ -87,15 +88,6 @@ pub trait NDArray {
     ) -> Result<Self::ViewWithD<'_, BD>>
     where
         BD: Dimensionality;
-    #[allow(clippy::type_complexity)]
-    fn expand_shape(
-        &self,
-        axis: isize,
-    ) -> Result<Self::CowWithD<'_, <<
-        <Self::D as DimensionalityAdd<NDims<1>>>::Output
-            as Dimensionality>::SignedShape as SignedShape>::Dimensionality>>
-    where
-        Self::D: DimensionalityAdd<NDims<1>>;
     fn is_empty(&self) -> bool;
     fn iter<'a>(&self) -> Self::Iter<'a>;
     fn len(&self) -> usize;
@@ -113,19 +105,19 @@ pub trait NDArray {
         ST: AsRef<[ArrayIndex]>;
     fn strides(&self) -> &<<Self::D as Dimensionality>::Shape as Shape>::Strides;
     fn to_owned_array(&self) -> Self::Owned;
-    fn to_shape<Sh2>(
+    fn to_shape<NS>(
         &self,
-        shape: Sh2,
-    ) -> Result<Self::CowWithD<'_, <Sh2 as SignedShape>::Dimensionality>>
+        shape: NS,
+    ) -> Result<Self::CowWithD<'_, <NS as NewShape>::Dimensionality>>
     where
-        Sh2: SignedShape;
-    fn to_shape_with_order<Sh2, O2>(
+        NS: NewShape;
+    fn to_shape_with_order<NS, NO>(
         &self,
-        shape: Sh2,
-    ) -> Result<Self::CowWithDO<'_, <Sh2 as SignedShape>::Dimensionality, O2>>
+        shape: NS,
+    ) -> Result<Self::CowWithDO<'_, <NS as NewShape>::Dimensionality, NO>>
     where
-        O2: Order,
-        Sh2: SignedShape;
+        NO: Order,
+        NS: NewShape;
     fn transpose(&self) -> Self::View<'_>;
     fn view(&self) -> Self::View<'_>;
 }
@@ -142,6 +134,7 @@ where
     where
         Self: 'a,
         D2: Dimensionality;
+
     fn fill(&mut self, value: <Self::S as Storage>::Elem);
     fn iter_mut<'a>(&mut self) -> IterMut<'a, <Self::S as Storage>::Elem, Self::D>;
     #[allow(clippy::type_complexity)]
@@ -162,6 +155,7 @@ where
     type WithD<D2>: NDArrayOwned<D = D2, O = Self::O, S = Self::S>
     where
         D2: Dimensionality;
+
     fn allocate_uninitialized<Sh>(shape: &Sh) -> Self
     where
         Sh: Shape<Dimensionality = Self::D>;
@@ -171,19 +165,16 @@ where
         T: NDArray,
         <<T as NDArray>::D as Dimensionality>::Shape: Shape<Dimensionality = Self::D>,
         <T as NDArray>::S: Storage<Elem = <Self::S as Storage>::Elem>;
-    fn into_shape<Sh2>(
-        self,
-        shape: Sh2,
-    ) -> Result<Self::WithD<<Sh2 as SignedShape>::Dimensionality>>
+    fn into_shape<NS>(self, shape: NS) -> Result<Self::WithD<<NS as NewShape>::Dimensionality>>
     where
-        Sh2: SignedShape;
-    fn into_shape_with_order<Sh2, O2>(
+        NS: NewShape;
+    fn into_shape_with_order<NS, NO>(
         self,
-        shape: Sh2,
-    ) -> Result<Self::WithD<<Sh2 as SignedShape>::Dimensionality>>
+        shape: NS,
+    ) -> Result<Self::WithD<<NS as NewShape>::Dimensionality>>
     where
-        O2: Order,
-        Sh2: SignedShape;
+        NO: Order,
+        NS: NewShape;
     fn ones<Sh>(shape: &Sh) -> Self
     where
         <Self::S as Storage>::Elem: One,

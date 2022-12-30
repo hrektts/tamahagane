@@ -7,7 +7,7 @@ use core::{
 };
 
 use crate::{Dimensionality, DynDim, NDims};
-pub trait SignedShape:
+pub trait NewShape:
     AsRef<[isize]>
     + AsMut<[isize]>
     + Clone
@@ -22,7 +22,7 @@ pub trait SignedShape:
     fn ndims(&self) -> usize;
 }
 
-impl<const N: usize> SignedShape for [isize; N] {
+impl<const N: usize> NewShape for [isize; N] {
     type Dimensionality = NDims<N>;
 
     fn ndims(&self) -> usize {
@@ -30,7 +30,7 @@ impl<const N: usize> SignedShape for [isize; N] {
     }
 }
 
-impl SignedShape for Vec<isize> {
+impl NewShape for Vec<isize> {
     type Dimensionality = DynDim;
 
     fn ndims(&self) -> usize {
