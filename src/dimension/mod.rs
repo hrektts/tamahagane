@@ -4,13 +4,11 @@ pub use ops::{DimensionalityAdd, DimensionalityAfterDot, DimensionalityMax};
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
 
-use crate::{Shape, SignedShape};
+use crate::Shape;
 
 pub trait Dimensionality: DimensionalityAdd<DynDimDiff> {
     type Shape: Shape;
-    type SignedShape: SignedShape;
     fn shape_zeroed(n_dims: usize) -> Self::Shape;
-    fn signed_shape_zeroed(n_dims: usize) -> Self::SignedShape;
     fn strides_zeroed(n_dims: usize) -> <Self::Shape as Shape>::Strides;
 
     fn first_indices(shape: &Self::Shape) -> Option<Self::Shape> {
@@ -27,14 +25,8 @@ pub struct NDims<const N: usize>;
 
 impl<const N: usize> Dimensionality for NDims<N> {
     type Shape = [usize; N];
-    type SignedShape = [isize; N];
 
     fn shape_zeroed(n_dims: usize) -> Self::Shape {
-        assert_eq!(n_dims, N);
-        [0; N]
-    }
-
-    fn signed_shape_zeroed(n_dims: usize) -> Self::SignedShape {
         assert_eq!(n_dims, N);
         [0; N]
     }
@@ -50,20 +42,12 @@ pub struct DynDim;
 
 impl Dimensionality for DynDim {
     type Shape = Vec<usize>;
-    type SignedShape = Vec<isize>;
 
     fn shape_zeroed(n_dims: usize) -> Self::Shape {
         let mut shape = Vec::<usize>::new();
         shape.reserve(n_dims);
         shape.resize(n_dims, 0);
         shape
-    }
-
-    fn signed_shape_zeroed(n_dims: usize) -> Self::SignedShape {
-        let mut strides = Vec::<isize>::new();
-        strides.reserve(n_dims);
-        strides.resize(n_dims, 0);
-        strides
     }
 
     fn strides_zeroed(n_dims: usize) -> <Self::Shape as Shape>::Strides {

@@ -18,7 +18,7 @@ use num_traits::{One, Zero};
 use crate::{
     storage::{Storage, StorageBase, StorageMut, StorageOwned},
     util, ArrayIndex, Dimensionality, DimensionalityAdd, DimensionalityDiff, Error, NDArray,
-    NDArrayMut, NDArrayOwned, NDims, Order, Result, RowMajor, Shape, ShapeError, SignedShape,
+    NDArrayMut, NDArrayOwned, NDims, NewShape, Order, Result, RowMajor, Shape, ShapeError,
     SliceInfo,
 };
 
@@ -136,33 +136,6 @@ macro_rules! impl_ndarray {
                 })
             }
 
-            fn expand_shape(
-                &self,
-                axis: isize,
-            ) -> Result<Self::CowWithD<'_, <<
-                <Self::D as DimensionalityAdd<NDims<1>>>::Output
-                    as Dimensionality>::SignedShape as SignedShape>::Dimensionality>>
-            where
-                Self::D: DimensionalityAdd<NDims<1>>,
-            {
-                let n_dims = self.ndims();
-                let axis_normalized = routine::normalize_axis(axis, n_dims)?;
-                let mut out_shape =
-                    <Self::D as DimensionalityAdd<NDims<1>>>::Output::signed_shape_zeroed(n_dims);
-                for (out_dim, dim) in out_shape.as_mut().iter_mut().zip(
-                    self.shape()
-                        .as_ref()
-                        .iter()
-                        .take(axis_normalized)
-                        .chain([1].iter())
-                        .chain(self.shape().as_ref().iter().skip(axis_normalized)),
-                ) {
-                    *out_dim = *dim as isize;
-                }
-
-                self.to_shape(out_shape)
-            }
-
             #[inline]
             fn is_empty(&self) -> bool {
                 self.len() == 0
@@ -266,26 +239,26 @@ macro_rules! impl_ndarray {
                 }
             }
 
-            fn to_shape<Sh2>(
+            fn to_shape<NS>(
                 &self,
-                shape: Sh2,
-            ) -> Result<Self::CowWithD<'_, <Sh2 as SignedShape>::Dimensionality>>
+                shape: NS,
+            ) -> Result<Self::CowWithD<'_, <NS as NewShape>::Dimensionality>>
             where
-                Sh2: SignedShape,
+                NS: NewShape,
             {
                 self.to_shape_with_order::<_, O>(shape)
             }
 
-            fn to_shape_with_order<Sh2, O2>(
+            fn to_shape_with_order<NS, NO>(
                 &self,
-                shape: Sh2,
-            ) -> Result<Self::CowWithDO<'_, <Sh2 as SignedShape>::Dimensionality, O2>>
+                shape: NS,
+            ) -> Result<Self::CowWithDO<'_, <NS as NewShape>::Dimensionality, NO>>
             where
-                O2: Order,
-                Sh2: SignedShape,
+                NO: Order,
+                NS: NewShape,
             {
                 if self.ndims() == shape.ndims()
-                    && util::type_eq::<O, O2>()
+                    && util::type_eq::<O, NO>()
                     && self
                         .shape
                         .as_ref()
@@ -304,7 +277,7 @@ macro_rules! impl_ndarray {
                 }
 
                 let out_shape = self.infer_shape(shape)?;
-                if let Some(out_strides) = self.compute_strides_reshaped::<O2, _>(&out_shape) {
+                if let Some(out_strides) = self.compute_strides_reshaped::<NO, _>(&out_shape) {
                     Ok(ArrayBase {
                         shape: out_shape,
                         strides: out_strides,
@@ -497,26 +470,23 @@ where
         Ok(out)
     }
 
-    fn into_shape<Sh2>(
-        self,
-        shape: Sh2,
-    ) -> Result<Self::WithD<<Sh2 as SignedShape>::Dimensionality>>
+    fn into_shape<NS>(self, shape: NS) -> Result<Self::WithD<<NS as NewShape>::Dimensionality>>
     where
-        Sh2: SignedShape,
+        NS: NewShape,
     {
         self.into_shape_with_order::<_, O>(shape)
     }
 
-    fn into_shape_with_order<Sh2, O2>(
+    fn into_shape_with_order<NS, NO>(
         self,
-        shape: Sh2,
-    ) -> Result<Self::WithD<<Sh2 as SignedShape>::Dimensionality>>
+        shape: NS,
+    ) -> Result<Self::WithD<<NS as NewShape>::Dimensionality>>
     where
-        Sh2: SignedShape,
-        O2: Order,
+        NS: NewShape,
+        NO: Order,
     {
         if self.ndims() == shape.ndims()
-            && util::type_eq::<O, O2>()
+            && util::type_eq::<O, NO>()
             && self
                 .shape
                 .as_ref()
@@ -526,7 +496,7 @@ where
         {
             let out_shape = self.convert_shape(&shape);
             return Ok(ArrayBase {
-                strides: out_shape.to_default_strides::<O2>(),
+                strides: out_shape.to_default_strides::<NO>(),
                 shape: out_shape,
                 storage: self.storage,
                 offset: 0,
@@ -535,7 +505,7 @@ where
         }
 
         let out_shape = self.infer_shape(shape)?;
-        if let Some(out_strides) = self.compute_strides_reshaped::<O2, _>(&out_shape) {
+        if let Some(out_strides) = self.compute_strides_reshaped::<NO, _>(&out_shape) {
             Ok(ArrayBase {
                 shape: out_shape,
                 strides: out_strides,
@@ -589,39 +559,39 @@ where
     O: Order,
     S: Storage,
 {
-    fn convert_shape<Sh2>(
+    fn convert_shape<NS>(
         &self,
-        shape: &Sh2,
-    ) -> <<Sh2 as SignedShape>::Dimensionality as Dimensionality>::Shape
+        shape: &NS,
+    ) -> <<NS as NewShape>::Dimensionality as Dimensionality>::Shape
     where
-        Sh2: SignedShape,
+        NS: NewShape,
     {
         debug_assert_eq!(self.ndims(), shape.ndims());
 
         let mut out_shape =
-            <<Sh2 as SignedShape>::Dimensionality as Dimensionality>::shape_zeroed(shape.ndims());
+            <<NS as NewShape>::Dimensionality as Dimensionality>::shape_zeroed(shape.ndims());
         for (dest, src) in out_shape.as_mut().iter_mut().zip(self.shape.as_ref()) {
             *dest = *src;
         }
         out_shape
     }
 
-    fn convert_shape_and_strides<Sh2>(
+    fn convert_shape_and_strides<NS>(
         &self,
-        shape: &Sh2,
+        shape: &NS,
     ) -> (
-        <<Sh2 as SignedShape>::Dimensionality as Dimensionality>::Shape,
-        <<<Sh2 as SignedShape>::Dimensionality as Dimensionality>::Shape as Shape>::Strides,
+        <<NS as NewShape>::Dimensionality as Dimensionality>::Shape,
+        <<<NS as NewShape>::Dimensionality as Dimensionality>::Shape as Shape>::Strides,
     )
     where
-        Sh2: SignedShape,
+        NS: NewShape,
     {
         debug_assert_eq!(self.ndims(), shape.ndims());
 
-        let out_shape = self.convert_shape::<Sh2>(shape);
+        let out_shape = self.convert_shape::<NS>(shape);
 
         let mut out_strides =
-            <<Sh2 as SignedShape>::Dimensionality as Dimensionality>::strides_zeroed(shape.ndims());
+            <<NS as NewShape>::Dimensionality as Dimensionality>::strides_zeroed(shape.ndims());
         for (dest, src) in out_strides.as_mut().iter_mut().zip(self.strides.as_ref()) {
             *dest = *src;
         }
@@ -746,12 +716,12 @@ where
         Ok(strides)
     }
 
-    fn compute_strides_reshaped<O2, Sh2>(&self, shape: &Sh2) -> Option<<Sh2 as Shape>::Strides>
+    fn compute_strides_reshaped<NO, RS>(&self, shape: &RS) -> Option<<RS as Shape>::Strides>
     where
-        O2: Order,
-        Sh2: Shape,
+        NO: Order,
+        RS: Shape,
     {
-        let mut strides = shape.to_default_strides::<O2>();
+        let mut strides = shape.to_default_strides::<NO>();
         let array_len = self.len();
         if array_len > 0 {
             let (reduced_shape, reduced_strides, reduced_n_dims) = {
@@ -779,11 +749,11 @@ where
                 }
             };
 
-            if !O2::is_data_aligned_monotonically(reduced_shape.as_ref(), reduced_strides.as_ref())
+            if !NO::is_data_aligned_monotonically(reduced_shape.as_ref(), reduced_strides.as_ref())
             {
                 None
             } else {
-                O2::convert_shape_to_strides(
+                NO::convert_shape_to_strides(
                     shape,
                     reduced_strides[reduced_n_dims - 1],
                     &mut strides,
@@ -795,15 +765,15 @@ where
         }
     }
 
-    fn infer_shape<Sh2>(
+    fn infer_shape<NS>(
         &self,
-        shape: Sh2,
-    ) -> Result<<<Sh2 as SignedShape>::Dimensionality as Dimensionality>::Shape>
+        shape: NS,
+    ) -> Result<<<NS as NewShape>::Dimensionality as Dimensionality>::Shape>
     where
-        Sh2: SignedShape,
+        NS: NewShape,
     {
         let mut inferred =
-            <<Sh2 as SignedShape>::Dimensionality as Dimensionality>::shape_zeroed(shape.ndims());
+            <<NS as NewShape>::Dimensionality as Dimensionality>::shape_zeroed(shape.ndims());
 
         for (i, &dim) in shape.as_ref().iter().enumerate() {
             if dim < 0 {
