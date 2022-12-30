@@ -1,5 +1,5 @@
-mod new_shape;
-pub use new_shape::NewShape;
+mod signed_shape;
+pub use signed_shape::SignedShape;
 
 #[cfg(not(feature = "std"))]
 use alloc::vec::Vec;
