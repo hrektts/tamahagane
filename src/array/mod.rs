@@ -17,9 +17,9 @@ use num_traits::{One, Zero};
 
 use crate::{
     storage::{Storage, StorageBase, StorageMut, StorageOwned},
-    util, ArrayIndex, Dimensionality, DimensionalityAdd, DimensionalityDiff, Error, NDArray,
-    NDArrayMut, NDArrayOwned, NDims, Order, Result, RowMajor, Shape, ShapeError, SignedShape,
-    SliceInfo,
+    util, ArrayIndex, DimDiff, Dimensionality, DimensionalityAdd, DimensionalityDiff, Error,
+    NDArray, NDArrayMut, NDArrayOwned, NDims, Order, Result, RowMajor, Shape, ShapeError,
+    SignedShape, SliceInfo,
 };
 
 #[derive(Clone, Hash, Eq, PartialEq)]
@@ -134,6 +134,33 @@ macro_rules! impl_ndarray {
                     offset: self.offset,
                     phantom: PhantomData,
                 })
+            }
+
+            fn expand_shape(
+                &self,
+                axis: isize,
+            ) -> Result<Self::CowWithD<'_, <<
+                <Self::D as DimensionalityAdd<DimDiff<1>>>::Output
+                    as Dimensionality>::SignedShape as SignedShape>::Dimensionality>>
+            where
+                Self::D: DimensionalityAdd<DimDiff<1>>,
+            {
+                let n_dims = self.ndims();
+                let axis_normalized = routine::normalize_axis(axis, n_dims + 1)?;
+                let mut out_shape =
+                    <Self::D as DimensionalityAdd<DimDiff<1>>>::Output::signed_shape_zeroed(n_dims + 1);
+                for (out_dim, dim) in out_shape.as_mut().iter_mut().zip(
+                    self.shape()
+                        .as_ref()
+                        .iter()
+                        .take(axis_normalized)
+                        .chain([1].iter())
+                        .chain(self.shape().as_ref().iter().skip(axis_normalized)),
+                ) {
+                    *out_dim = *dim as isize;
+                }
+
+                self.to_shape(out_shape)
             }
 
             #[inline]
@@ -1208,6 +1235,47 @@ mod tests {
         assert_eq!(subject.offset, 0);
 
         Ok(())
+    }
+
+    #[test]
+    fn expand_shape() {
+        let a = array!([[1, 2], [3, 4]]);
+        {
+            let subject = a.expand_shape(0).unwrap();
+
+            assert_eq!(
+                subject.iter().cloned().collect::<Vec<_>>(),
+                vec![1, 2, 3, 4]
+            );
+            assert_eq!(subject.shape(), &[1, 2, 2]);
+        }
+        {
+            let subject = a.expand_shape(2).unwrap();
+
+            assert_eq!(
+                subject.iter().cloned().collect::<Vec<_>>(),
+                vec![1, 2, 3, 4]
+            );
+            assert_eq!(subject.shape(), &[2, 2, 1]);
+        }
+        {
+            let subject = a.expand_shape(-1).unwrap();
+
+            assert_eq!(
+                subject.iter().cloned().collect::<Vec<_>>(),
+                vec![1, 2, 3, 4]
+            );
+            assert_eq!(subject.shape(), &[2, 2, 1]);
+        }
+        {
+            let subject = a.expand_shape(-3).unwrap();
+
+            assert_eq!(
+                subject.iter().cloned().collect::<Vec<_>>(),
+                vec![1, 2, 3, 4]
+            );
+            assert_eq!(subject.shape(), &[1, 2, 2]);
+        }
     }
 
     #[test]
