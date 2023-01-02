@@ -568,6 +568,23 @@ where
         }
     }
 
+    fn stack<T>(arrays: &[T], axis: isize) -> Result<Self>
+    where
+        Self: Sized,
+        T: NDArray,
+        <T as NDArray>::D: DimensionalityAdd<DimDiff<1>>,
+        <<<<<T as NDArray>::D as DimensionalityAdd<DimDiff<1>>>::Output
+            as Dimensionality>::SignedShape as SignedShape>::Dimensionality
+            as Dimensionality>::Shape: Shape<Dimensionality = Self::D>,
+        <T as NDArray>::S: Storage<Elem = <Self::S as Storage>::Elem>,
+    {
+        let expanded_arrays = arrays
+            .iter()
+            .map(|x| x.expand_shape(axis))
+            .collect::<Result<Vec<_>>>()?;
+        Self::WithD::concatenate(&expanded_arrays, axis)
+    }
+
     fn zeros<Sh>(shape: &Sh) -> Self
     where
         <Self::S as Storage>::Elem: Zero,
@@ -1469,6 +1486,32 @@ mod tests {
 
         assert_eq!(subject.shape(), &[0, 1, 2]);
         assert_eq!(subject.strides(), &[2, 2, 1]);
+    }
+
+    #[test]
+    fn stack() {
+        let a = (0_usize..6)
+            .collect::<Array<_, _>>()
+            .into_shape([1, 2, 3])
+            .unwrap();
+        {
+            let actual = Array::stack(&[a.view(), a.view()], 0).unwrap();
+            let expected = array!([[[[0, 1, 2], [3, 4, 5]]], [[[0, 1, 2], [3, 4, 5]]]]);
+
+            assert_eq!(actual, expected);
+        }
+        {
+            let actual = Array::stack(&[a.view(), a.view()], 1).unwrap();
+            let expected = array!([[[[0, 1, 2], [3, 4, 5]], [[0, 1, 2], [3, 4, 5]]]]);
+
+            assert_eq!(actual, expected);
+        }
+        {
+            let actual = Array::stack(&[a.view(), a.view()], 2).unwrap();
+            let expected = array!([[[[0, 1, 2], [0, 1, 2]], [[3, 4, 5], [3, 4, 5]]]]);
+
+            assert_eq!(actual, expected);
+        }
     }
 
     #[test]

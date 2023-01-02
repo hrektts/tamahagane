@@ -188,6 +188,15 @@ where
     where
         <Self::S as Storage>::Elem: One,
         Sh: Shape<Dimensionality = Self::D>;
+    fn stack<T>(arrays: &[T], axis: isize) -> Result<Self>
+    where
+        Self: Sized,
+        T: NDArray,
+        <T as NDArray>::D: DimensionalityAdd<DimDiff<1>>,
+        <<<<<T as NDArray>::D as DimensionalityAdd<DimDiff<1>>>::Output
+            as Dimensionality>::SignedShape as SignedShape>::Dimensionality
+            as Dimensionality>::Shape: Shape<Dimensionality = Self::D>,
+        <T as NDArray>::S: Storage<Elem = <Self::S as Storage>::Elem>;
     fn zeros<Sh>(shape: &Sh) -> Self
     where
         <Self::S as Storage>::Elem: Zero,
