@@ -113,19 +113,19 @@ pub trait NDArray {
         ST: AsRef<[ArrayIndex]>;
     fn strides(&self) -> &<<Self::D as Dimensionality>::Shape as Shape>::Strides;
     fn to_owned_array(&self) -> Self::Owned;
-    fn to_shape<Sh2>(
+    fn to_shape<Sh>(
         &self,
-        shape: Sh2,
-    ) -> Result<Self::CowWithD<'_, <Sh2 as SignedShape>::Dimensionality>>
+        shape: Sh,
+    ) -> Result<Self::CowWithD<'_, <Sh as SignedShape>::Dimensionality>>
     where
-        Sh2: SignedShape;
-    fn to_shape_with_order<Sh2, O2>(
+        Sh: SignedShape;
+    fn to_shape_with_order<Sh, O2>(
         &self,
-        shape: Sh2,
-    ) -> Result<Self::CowWithDO<'_, <Sh2 as SignedShape>::Dimensionality, O2>>
+        shape: Sh,
+    ) -> Result<Self::CowWithDO<'_, <Sh as SignedShape>::Dimensionality, O2>>
     where
         O2: Order,
-        Sh2: SignedShape;
+        Sh: SignedShape;
     fn transpose(&self) -> Self::View<'_>;
     fn view(&self) -> Self::View<'_>;
 }
@@ -171,19 +171,16 @@ where
         T: NDArray,
         <<T as NDArray>::D as Dimensionality>::Shape: Shape<Dimensionality = Self::D>,
         <T as NDArray>::S: Storage<Elem = <Self::S as Storage>::Elem>;
-    fn into_shape<Sh2>(
-        self,
-        shape: Sh2,
-    ) -> Result<Self::WithD<<Sh2 as SignedShape>::Dimensionality>>
+    fn into_shape<Sh>(self, shape: Sh) -> Result<Self::WithD<<Sh as SignedShape>::Dimensionality>>
     where
-        Sh2: SignedShape;
-    fn into_shape_with_order<Sh2, O2>(
+        Sh: SignedShape;
+    fn into_shape_with_order<Sh, O2>(
         self,
-        shape: Sh2,
-    ) -> Result<Self::WithD<<Sh2 as SignedShape>::Dimensionality>>
+        shape: Sh,
+    ) -> Result<Self::WithD<<Sh as SignedShape>::Dimensionality>>
     where
-        O2: Order,
-        Sh2: SignedShape;
+        Sh: SignedShape,
+        O2: Order;
     fn ones<Sh>(shape: &Sh) -> Self
     where
         <Self::S as Storage>::Elem: One,
