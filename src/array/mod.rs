@@ -73,32 +73,37 @@ macro_rules! impl_ndarray {
             O: Order,
             S: Storage,
         {
-            type D = D;
-            type O = O;
-            type S = S;
-            type Iter<'a> = Iter<'a, <Self::S as Storage>::Elem, Self::D>
+            type Dimensionality = D;
+            type Order = O;
+            type Storage = S;
+            type Iter<'a> = Iter<'a, <Self::Storage as Storage>::Elem, Self::Dimensionality>
             where
-                <Self::S as Storage>::Elem: 'a;
-            type CowWithD<'a, D2> = ArrayBase<<Self::S as Storage>::Cow<'a>, D2, Self::O>
+                <Self::Storage as Storage>::Elem: 'a;
+            type CowWithD<'a, D2> = ArrayBase<<Self::Storage as Storage>::Cow<'a>, D2, Self::Order>
             where
                 Self: 'a,
                 D2: Dimensionality;
-            type CowWithDO<'a, D2, O2> = ArrayBase<<Self::S as Storage>::Cow<'a>, D2, O2>
+            type CowWithDO<'a, D2, O2> = ArrayBase<<Self::Storage as Storage>::Cow<'a>, D2, O2>
             where
                 Self: 'a,
                 D2: Dimensionality,
                 O2: Order;
-            type Owned = ArrayBase<<Self::S as Storage>::Owned, Self::D, Self::O>;
-            type View<'a> = ArrayBase<<Self::S as Storage>::View<'a>, Self::D, Self::O>
+            type Owned =
+                ArrayBase<<Self::Storage as Storage>::Owned, Self::Dimensionality, Self::Order>;
+            type View<'a> =
+                ArrayBase<<Self::Storage as Storage>::View<'a>, Self::Dimensionality, Self::Order>
             where
                 Self: 'a;
-            type ViewWithD<'a, D2> = ArrayBase<<Self::S as Storage>::View<'a>, D2, Self::O>
+            type ViewWithD<'a, D2> =
+                ArrayBase<<Self::Storage as Storage>::View<'a>, D2, Self::Order>
             where
                 Self: 'a,
                 D2: Dimensionality;
 
-            fn as_ptr(&self) -> *const <Self::S as Storage>::Elem {
-                let ptr = if self.storage.as_slice().is_empty() || mem::size_of::<<Self::S as Storage>::Elem>() == 0 {
+            fn as_ptr(&self) -> *const <Self::Storage as Storage>::Elem {
+                let ptr = if self.storage.as_slice().is_empty()
+                    || mem::size_of::<<Self::Storage as Storage>::Elem>() == 0
+                {
                     self.storage.as_ptr()
                 } else {
                     self.storage.as_ptr().wrapping_add(self.offset)
@@ -106,8 +111,13 @@ macro_rules! impl_ndarray {
 
                 debug_assert!(
                     ptr >= self.storage.as_ptr()
-                        && (ptr < self.storage.as_ptr().wrapping_add(self.storage.as_slice().len())
-                            || ((self.is_empty() || mem::size_of::<<Self::S as Storage>::Elem>() == 0)
+                        && (ptr
+                            < self
+                                .storage
+                                .as_ptr()
+                                .wrapping_add(self.storage.as_slice().len())
+                            || ((self.is_empty()
+                                || mem::size_of::<<Self::Storage as Storage>::Elem>() == 0)
                                 && ptr == self.storage.as_ptr()))
                 );
                 ptr
@@ -140,15 +150,16 @@ macro_rules! impl_ndarray {
                 &self,
                 axis: isize,
             ) -> Result<Self::CowWithD<'_, <<
-                <Self::D as DimensionalityAdd<DimDiff<1>>>::Output
+                <Self::Dimensionality as DimensionalityAdd<DimDiff<1>>>::Output
                     as Dimensionality>::SignedShape as SignedShape>::Dimensionality>>
             where
-                Self::D: DimensionalityAdd<DimDiff<1>>,
+                Self::Dimensionality: DimensionalityAdd<DimDiff<1>>,
             {
                 let n_dims = self.ndims();
                 let axis_normalized = routine::normalize_axis(axis, n_dims + 1)?;
                 let mut out_shape =
-                    <Self::D as DimensionalityAdd<DimDiff<1>>>::Output::signed_shape_zeroed(n_dims + 1);
+                    <Self::Dimensionality
+                        as DimensionalityAdd<DimDiff<1>>>::Output::signed_shape_zeroed(n_dims + 1);
                 for (out_dim, dim) in out_shape.as_mut().iter_mut().zip(
                     self.shape()
                         .as_ref()
@@ -183,7 +194,10 @@ macro_rules! impl_ndarray {
                 self.shape.ndims()
             }
 
-            fn permute(&self, axes: <Self::D as Dimensionality>::Shape) -> Result<Self::View<'_>> {
+            fn permute(
+                &self,
+                axes: <Self::Dimensionality as Dimensionality>::Shape,
+            ) -> Result<Self::View<'_>> {
                 if axes.ndims() != self.ndims() {
                     return Err(
                         ShapeError::IncompatibleAxis("axes do not match array".into()).into(),
@@ -230,9 +244,9 @@ macro_rules! impl_ndarray {
             fn slice<ST, SD>(
                 &self,
                 info: SliceInfo<ST, SD>,
-            ) -> Self::ViewWithD<'_, <Self::D as DimensionalityAdd<SD>>::Output>
+            ) -> Self::ViewWithD<'_, <Self::Dimensionality as DimensionalityAdd<SD>>::Output>
             where
-                Self::D: DimensionalityAdd<SD>,
+                Self::Dimensionality: DimensionalityAdd<SD>,
                 SD: DimensionalityDiff,
                 ST: AsRef<[ArrayIndex]>,
             {
@@ -247,19 +261,21 @@ macro_rules! impl_ndarray {
             }
 
             #[inline]
-            fn shape(&self) -> &<Self::D as Dimensionality>::Shape {
+            fn shape(&self) -> &<Self::Dimensionality as Dimensionality>::Shape {
                 &self.shape
             }
 
             #[inline]
-            fn strides(&self) -> &<<Self::D as Dimensionality>::Shape as Shape>::Strides {
+            fn strides(
+                &self,
+            ) -> &<<Self::Dimensionality as Dimensionality>::Shape as Shape>::Strides {
                 &self.strides
             }
 
             fn to_owned_array(&self) -> Self::Owned {
                 ArrayBase {
                     shape: self.shape.clone(),
-                    strides: self.shape.to_default_strides::<Self::O>(),
+                    strides: self.shape.to_default_strides::<Self::Order>(),
                     storage: self.iter().cloned().collect(),
                     offset: 0,
                     phantom: PhantomData,
@@ -364,28 +380,31 @@ macro_rules! impl_ndarray_mut {
             O: Order,
             S: StorageMut,
         {
-            type ViewMutWithD<'a, D2> = ArrayBase<<Self::S as StorageMut>::ViewMut<'a>, D2, Self::O>
+            type ViewMutWithD<'a, D2> =
+                ArrayBase<<Self::Storage as StorageMut>::ViewMut<'a>, D2, Self::Order>
             where
                 Self: 'a,
                 D2: Dimensionality;
 
-            fn fill(&mut self, value: <Self::S as Storage>::Elem) {
+            fn fill(&mut self, value: <Self::Storage as Storage>::Elem) {
                 for elem in self.iter_mut() {
                     *elem = value.clone();
                 }
             }
 
             #[inline]
-            fn iter_mut<'a>(&mut self) -> IterMut<'a, <Self::S as Storage>::Elem, Self::D> {
+            fn iter_mut<'a>(
+                &mut self,
+            ) -> IterMut<'a, <Self::Storage as Storage>::Elem, Self::Dimensionality> {
                 IterMut::new(self)
             }
 
             fn slice_mut<ST, SD>(
                 &mut self,
                 info: SliceInfo<ST, SD>,
-            ) -> Self::ViewMutWithD<'_, <Self::D as DimensionalityAdd<SD>>::Output>
+            ) -> Self::ViewMutWithD<'_, <Self::Dimensionality as DimensionalityAdd<SD>>::Output>
             where
-                Self::D: DimensionalityAdd<SD>,
+                Self::Dimensionality: DimensionalityAdd<SD>,
                 SD: DimensionalityDiff,
                 ST: AsRef<[ArrayIndex]>,
             {
@@ -411,16 +430,16 @@ where
     O: Order,
     S: StorageMut + StorageOwned,
 {
-    type WithD<D2> = ArrayBase<Self::S, D2, Self::O> where D2: Dimensionality;
+    type WithD<D2> = ArrayBase<Self::Storage, D2, Self::Order> where D2: Dimensionality;
 
     fn allocate_uninitialized<Sh>(shape: &Sh) -> Self
     where
-        Sh: Shape<Dimensionality = Self::D>,
+        Sh: Shape<Dimensionality = Self::Dimensionality>,
     {
         ArrayBase {
             shape: shape.as_associated_shape().clone(),
             strides: shape.as_associated_shape().to_default_strides::<O>(),
-            storage: Self::S::allocate_uninitialized(shape.as_associated_shape().array_len()),
+            storage: Self::Storage::allocate_uninitialized(shape.as_associated_shape().array_len()),
             offset: 0,
             phantom: PhantomData,
         }
@@ -430,8 +449,9 @@ where
     where
         Self: Sized,
         T: NDArray,
-        <<T as NDArray>::D as Dimensionality>::Shape: Shape<Dimensionality = Self::D>,
-        <T as NDArray>::S: Storage<Elem = <Self::S as Storage>::Elem>,
+        <<T as NDArray>::Dimensionality as Dimensionality>::Shape:
+            Shape<Dimensionality = Self::Dimensionality>,
+        <T as NDArray>::Storage: Storage<Elem = <Self::Storage as Storage>::Elem>,
     {
         if arrays.is_empty() {
             return Err(Error::Value(
@@ -466,7 +486,12 @@ where
                     if i == axis_normalized {
                         *dim += *d;
                     } else if dim != d {
-                        return Err(ShapeError::IncompatibleDimension("all the input array dimensions except for the concatenation axis must match exactly".into()).into());
+                        return Err(ShapeError::IncompatibleDimension(format!(
+                            "{} {}",
+                            "all the input array dimensions except for the",
+                            "concatenation axis must match exactly"
+                        ))
+                        .into());
                     }
                 }
             }
@@ -553,8 +578,8 @@ where
 
     fn ones<Sh>(shape: &Sh) -> Self
     where
-        <Self::S as Storage>::Elem: One,
-        Sh: Shape<Dimensionality = Self::D>,
+        <Self::Storage as Storage>::Elem: One,
+        Sh: Shape<Dimensionality = Self::Dimensionality>,
     {
         ArrayBase {
             shape: shape.as_associated_shape().clone(),
@@ -569,11 +594,11 @@ where
     where
         Self: Sized,
         T: NDArray,
-        <T as NDArray>::D: DimensionalityAdd<DimDiff<1>>,
-        <<<<<T as NDArray>::D as DimensionalityAdd<DimDiff<1>>>::Output
+        <T as NDArray>::Dimensionality: DimensionalityAdd<DimDiff<1>>,
+        <<<<<T as NDArray>::Dimensionality as DimensionalityAdd<DimDiff<1>>>::Output
             as Dimensionality>::SignedShape as SignedShape>::Dimensionality
-            as Dimensionality>::Shape: Shape<Dimensionality = Self::D>,
-        <T as NDArray>::S: Storage<Elem = <Self::S as Storage>::Elem>,
+            as Dimensionality>::Shape: Shape<Dimensionality = Self::Dimensionality>,
+        <T as NDArray>::Storage: Storage<Elem = <Self::Storage as Storage>::Elem>,
     {
         let expanded_arrays = arrays
             .iter()
@@ -584,8 +609,8 @@ where
 
     fn zeros<Sh>(shape: &Sh) -> Self
     where
-        <Self::S as Storage>::Elem: Zero,
-        Sh: Shape<Dimensionality = Self::D>,
+        <Self::Storage as Storage>::Elem: Zero,
+        Sh: Shape<Dimensionality = Self::Dimensionality>,
     {
         ArrayBase {
             shape: shape.as_associated_shape().clone(),

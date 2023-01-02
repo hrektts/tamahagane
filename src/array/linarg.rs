@@ -21,7 +21,7 @@ macro_rules! impl_dot {
             &'a <S as Storage>::Elem: Mul<&'b <S1 as Storage>::Elem, Output = <S as Storage>::Elem>,
             S1: Storage,
             <S1 as Storage>::Elem: 'b,
-            T: NDArray<D = D1, O = O, S = S1>,
+            T: NDArray<Dimensionality = D1, Order = O, Storage = S1>,
         {
             type Output =
                 ArrayBase<<S as Storage>::Owned, <D as DimensionalityAfterDot<D1>>::Output, O>;

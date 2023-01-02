@@ -68,7 +68,7 @@ where
     D: Dimensionality,
 {
     #[inline]
-    pub fn new<S>(a: &impl NDArray<D = D, S = S>, axis: usize) -> Self
+    pub fn new<S>(a: &impl NDArray<Dimensionality = D, Storage = S>, axis: usize) -> Self
     where
         D: Dimensionality,
         S: Storage<Elem = T>,
