@@ -125,7 +125,6 @@ pub trait NDArray {
         axes: <Self::Dimensionality as Dimensionality>::Shape,
     ) -> Result<Self::View<'_>>;
     fn shape(&self) -> &<Self::Dimensionality as Dimensionality>::Shape;
-    #[allow(clippy::type_complexity)]
     fn slice<ST, SD>(
         &self,
         info: SliceInfo<ST, SD>,
@@ -169,7 +168,6 @@ where
     fn iter_mut<'a>(
         &mut self,
     ) -> IterMut<'a, <Self::Storage as Storage>::Elem, Self::Dimensionality>;
-    #[allow(clippy::type_complexity)]
     fn slice_mut<ST, SD>(
         &mut self,
         info: SliceInfo<ST, SD>,
