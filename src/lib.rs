@@ -57,30 +57,50 @@ use num_traits::{One, Zero};
 use storage::{Storage, StorageMut, StorageOwned};
 
 pub trait NDArray {
-    type D: Dimensionality;
-    type O: Order;
-    type S: Storage;
-    type Iter<'a>: Iterator<Item = &'a <Self::S as Storage>::Elem>
+    type Dimensionality: Dimensionality;
+    type Order: Order;
+    type Storage: Storage;
+    type Iter<'a>: Iterator<Item = &'a <Self::Storage as Storage>::Elem>
     where
-        <Self::S as Storage>::Elem: 'a;
-    type CowWithD<'a, D2>: NDArray<D = D2, O = Self::O, S = <Self::S as Storage>::Cow<'a>>
+        <Self::Storage as Storage>::Elem: 'a;
+    type CowWithD<'a, D2>: NDArray<
+        Dimensionality = D2,
+        Order = Self::Order,
+        Storage = <Self::Storage as Storage>::Cow<'a>,
+    >
     where
         Self: 'a,
         D2: Dimensionality;
-    type CowWithDO<'a, D2, O2>: NDArray<D = D2, O = O2, S = <Self::S as Storage>::Cow<'a>>
+    type CowWithDO<'a, D2, O2>: NDArray<
+        Dimensionality = D2,
+        Order = O2,
+        Storage = <Self::Storage as Storage>::Cow<'a>,
+    >
     where
         Self: 'a,
         D2: Dimensionality,
         O2: Order;
-    type Owned: NDArray<D = Self::D, O = Self::O, S = <Self::S as Storage>::Owned>;
-    type View<'a>: NDArray<D = Self::D, O = Self::O, S = <Self::S as Storage>::View<'a>>
+    type Owned: NDArray<
+        Dimensionality = Self::Dimensionality,
+        Order = Self::Order,
+        Storage = <Self::Storage as Storage>::Owned,
+    >;
+    type View<'a>: NDArray<
+        Dimensionality = Self::Dimensionality,
+        Order = Self::Order,
+        Storage = <Self::Storage as Storage>::View<'a>,
+    >
     where
         Self: 'a;
-    type ViewWithD<'a, D2>: NDArray<D = D2, O = Self::O, S = <Self::S as Storage>::View<'a>>
+    type ViewWithD<'a, D2>: NDArray<
+        Dimensionality = D2,
+        Order = Self::Order,
+        Storage = <Self::Storage as Storage>::View<'a>,
+    >
     where
         Self: 'a,
         D2: Dimensionality;
-    fn as_ptr(&self) -> *const <Self::S as Storage>::Elem;
+    fn as_ptr(&self) -> *const <Self::Storage as Storage>::Elem;
     fn broadcast_to<BD>(
         &self,
         shape: &<BD as Dimensionality>::Shape,
@@ -92,113 +112,114 @@ pub trait NDArray {
         &self,
         axis: isize,
     ) -> Result<Self::CowWithD<'_, <<
-        <Self::D as DimensionalityAdd<DimDiff<1>>>::Output
+        <Self::Dimensionality as DimensionalityAdd<DimDiff<1>>>::Output
             as Dimensionality>::SignedShape as SignedShape>::Dimensionality>>
     where
-        Self::D: DimensionalityAdd<DimDiff<1>>;
+        Self::Dimensionality: DimensionalityAdd<DimDiff<1>>;
     fn is_empty(&self) -> bool;
     fn iter<'a>(&self) -> Self::Iter<'a>;
     fn len(&self) -> usize;
     fn ndims(&self) -> usize;
-    fn permute(&self, axes: <Self::D as Dimensionality>::Shape) -> Result<Self::View<'_>>;
-    fn shape(&self) -> &<Self::D as Dimensionality>::Shape;
-    #[allow(clippy::type_complexity)]
+    fn permute(
+        &self,
+        axes: <Self::Dimensionality as Dimensionality>::Shape,
+    ) -> Result<Self::View<'_>>;
+    fn shape(&self) -> &<Self::Dimensionality as Dimensionality>::Shape;
     fn slice<ST, SD>(
         &self,
         info: SliceInfo<ST, SD>,
-    ) -> Self::ViewWithD<'_, <Self::D as DimensionalityAdd<SD>>::Output>
+    ) -> Self::ViewWithD<'_, <Self::Dimensionality as DimensionalityAdd<SD>>::Output>
     where
-        Self::D: DimensionalityAdd<SD>,
+        Self::Dimensionality: DimensionalityAdd<SD>,
         SD: DimensionalityDiff,
         ST: AsRef<[ArrayIndex]>;
-    fn strides(&self) -> &<<Self::D as Dimensionality>::Shape as Shape>::Strides;
+    fn strides(&self) -> &<<Self::Dimensionality as Dimensionality>::Shape as Shape>::Strides;
     fn to_owned_array(&self) -> Self::Owned;
-    fn to_shape<Sh2>(
+    fn to_shape<Sh>(
         &self,
-        shape: Sh2,
-    ) -> Result<Self::CowWithD<'_, <Sh2 as SignedShape>::Dimensionality>>
+        shape: Sh,
+    ) -> Result<Self::CowWithD<'_, <Sh as SignedShape>::Dimensionality>>
     where
-        Sh2: SignedShape;
-    fn to_shape_with_order<Sh2, O2>(
+        Sh: SignedShape;
+    fn to_shape_with_order<Sh, O2>(
         &self,
-        shape: Sh2,
-    ) -> Result<Self::CowWithDO<'_, <Sh2 as SignedShape>::Dimensionality, O2>>
+        shape: Sh,
+    ) -> Result<Self::CowWithDO<'_, <Sh as SignedShape>::Dimensionality, O2>>
     where
         O2: Order,
-        Sh2: SignedShape;
+        Sh: SignedShape;
     fn transpose(&self) -> Self::View<'_>;
     fn view(&self) -> Self::View<'_>;
 }
 
 pub trait NDArrayMut: NDArray
 where
-    <Self as NDArray>::S: StorageMut,
+    <Self as NDArray>::Storage: StorageMut,
 {
     type ViewMutWithD<'a, D2>: NDArrayMut<
-        D = D2,
-        O = Self::O,
-        S = <Self::S as StorageMut>::ViewMut<'a>,
+        Dimensionality = D2,
+        Order = Self::Order,
+        Storage = <Self::Storage as StorageMut>::ViewMut<'a>,
     >
     where
         Self: 'a,
         D2: Dimensionality;
-    fn fill(&mut self, value: <Self::S as Storage>::Elem);
-    fn iter_mut<'a>(&mut self) -> IterMut<'a, <Self::S as Storage>::Elem, Self::D>;
-    #[allow(clippy::type_complexity)]
+    fn fill(&mut self, value: <Self::Storage as Storage>::Elem);
+    fn iter_mut<'a>(
+        &mut self,
+    ) -> IterMut<'a, <Self::Storage as Storage>::Elem, Self::Dimensionality>;
     fn slice_mut<ST, SD>(
         &mut self,
         info: SliceInfo<ST, SD>,
-    ) -> Self::ViewMutWithD<'_, <Self::D as DimensionalityAdd<SD>>::Output>
+    ) -> Self::ViewMutWithD<'_, <Self::Dimensionality as DimensionalityAdd<SD>>::Output>
     where
-        Self::D: DimensionalityAdd<SD>,
+        Self::Dimensionality: DimensionalityAdd<SD>,
         SD: DimensionalityDiff,
         ST: AsRef<[ArrayIndex]>;
 }
 
 pub trait NDArrayOwned: NDArray
 where
-    <Self as NDArray>::S: StorageOwned,
+    <Self as NDArray>::Storage: StorageOwned,
 {
-    type WithD<D2>: NDArrayOwned<D = D2, O = Self::O, S = Self::S>
+    type WithD<D2>: NDArrayOwned<Dimensionality = D2, Order = Self::Order, Storage = Self::Storage>
     where
         D2: Dimensionality;
     fn allocate_uninitialized<Sh>(shape: &Sh) -> Self
     where
-        Sh: Shape<Dimensionality = Self::D>;
+        Sh: Shape<Dimensionality = Self::Dimensionality>;
     fn concatenate<T>(arrays: &[T], axis: isize) -> Result<Self>
     where
         Self: Sized,
         T: NDArray,
-        <<T as NDArray>::D as Dimensionality>::Shape: Shape<Dimensionality = Self::D>,
-        <T as NDArray>::S: Storage<Elem = <Self::S as Storage>::Elem>;
-    fn into_shape<Sh2>(
-        self,
-        shape: Sh2,
-    ) -> Result<Self::WithD<<Sh2 as SignedShape>::Dimensionality>>
+        <<T as NDArray>::Dimensionality as Dimensionality>::Shape:
+            Shape<Dimensionality = Self::Dimensionality>,
+        <T as NDArray>::Storage: Storage<Elem = <Self::Storage as Storage>::Elem>;
+    fn into_shape<Sh>(self, shape: Sh) -> Result<Self::WithD<<Sh as SignedShape>::Dimensionality>>
     where
-        Sh2: SignedShape;
-    fn into_shape_with_order<Sh2, O2>(
+        Sh: SignedShape;
+    fn into_shape_with_order<Sh, O2>(
         self,
-        shape: Sh2,
-    ) -> Result<Self::WithD<<Sh2 as SignedShape>::Dimensionality>>
+        shape: Sh,
+    ) -> Result<Self::WithD<<Sh as SignedShape>::Dimensionality>>
     where
-        O2: Order,
-        Sh2: SignedShape;
+        Sh: SignedShape,
+        O2: Order;
     fn ones<Sh>(shape: &Sh) -> Self
     where
-        <Self::S as Storage>::Elem: One,
-        Sh: Shape<Dimensionality = Self::D>;
+        <Self::Storage as Storage>::Elem: One,
+        Sh: Shape<Dimensionality = Self::Dimensionality>;
     fn stack<T>(arrays: &[T], axis: isize) -> Result<Self>
     where
         Self: Sized,
         T: NDArray,
-        <T as NDArray>::D: DimensionalityAdd<DimDiff<1>>,
-        <<<<<T as NDArray>::D as DimensionalityAdd<DimDiff<1>>>::Output
+        <T as NDArray>::Dimensionality: DimensionalityAdd<DimDiff<1>>,
+        <<<<<T as NDArray>::Dimensionality as DimensionalityAdd<DimDiff<1>>>::Output
             as Dimensionality>::SignedShape as SignedShape>::Dimensionality
-            as Dimensionality>::Shape: Shape<Dimensionality = Self::D>,
-        <T as NDArray>::S: Storage<Elem = <Self::S as Storage>::Elem>;
+            as Dimensionality>::Shape: Shape<Dimensionality = Self::Dimensionality>,
+        <T as NDArray>::Storage: Storage<Elem = <Self::Storage as Storage>::Elem>;
     fn zeros<Sh>(shape: &Sh) -> Self
     where
-        <Self::S as Storage>::Elem: Zero,
-        Sh: Shape<Dimensionality = Self::D>;
+        <Self::Storage as Storage>::Elem: Zero,
+        Sh: Shape<Dimensionality = Self::Dimensionality>;
 }

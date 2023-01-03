@@ -89,7 +89,7 @@ macro_rules! impl_binary_op {
             <S as Storage>::Elem: $trait<&'a <S1 as Storage>::Elem, Output = <S as Storage>::Elem>,
             S1: Storage,
             <S1 as Storage>::Elem: 'a,
-            T: NDArray<D = D1, O = O, S = S1>,
+            T: NDArray<Dimensionality = D1, Order = O, Storage = S1>,
         {
             type Output = ArrayBase<S, <D as DimensionalityMax<D1>>::Output, O>;
 
@@ -146,7 +146,7 @@ macro_rules! impl_binary_op {
                 $trait<&'b <S1 as Storage>::Elem, Output = <S as Storage>::Elem>,
             S1: Storage,
             <S1 as Storage>::Elem: 'b,
-            T: NDArray<D = D1, O = O, S = S1>,
+            T: NDArray<Dimensionality = D1, Order = O, Storage = S1>,
         {
             type Output = ArrayBase<<S as Storage>::Owned, <D as DimensionalityMax<D1>>::Output, O>;
 
@@ -407,7 +407,7 @@ macro_rules! impl_binary_assign_op {
             <S as Storage>::Elem: $trait<&'a <S1 as Storage>::Elem>,
             S1: Storage,
             <S1 as Storage>::Elem: 'a,
-            T: NDArray<D = D1, O = O, S = S1>,
+            T: NDArray<Dimensionality = D1, Order = O, Storage = S1>,
         {
             fn $op(&mut self, rhs: T) {
                 if self.shape.as_ref() == rhs.shape().as_ref() {
