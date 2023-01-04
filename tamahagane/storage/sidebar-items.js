@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"struct":[["StorageBase",""]],"trait":[["Storage",""],["StorageMut",""],["StorageOwned",""]]};
