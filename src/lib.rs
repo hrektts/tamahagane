@@ -107,6 +107,8 @@ pub trait NDArray {
     ) -> Result<Self::ViewWithD<'_, BD>>
     where
         BD: Dimensionality;
+    fn flip(&self) -> Result<Self::View<'_>>;
+    fn flip_along_axes(&self, axes: &[isize]) -> Result<Self::View<'_>>;
     #[allow(clippy::type_complexity)]
     fn expand_shape(
         &self,

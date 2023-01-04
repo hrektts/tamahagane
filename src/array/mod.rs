@@ -174,6 +174,36 @@ macro_rules! impl_ndarray {
                 self.to_shape(out_shape)
             }
 
+            fn flip(&self) -> Result<Self::View<'_>> {
+                let mut axes = Self::Dimensionality::signed_shape_zeroed(self.ndims());
+                for (i, axis) in axes.as_mut().iter_mut().enumerate() {
+                    *axis = i as isize;
+                }
+                self.flip_along_axes(&axes.as_ref())
+            }
+
+            fn flip_along_axes(&self, axes: &[isize]) -> Result<Self::View<'_>> {
+                let out_shape = self.shape.clone();
+                let mut out_strides = self.strides.clone();
+                let mut out_offset = self.offset as isize;
+                let n_dims = self.ndims();
+                for &axis in axes {
+                    let axis_normalized = routine::normalize_axis(axis, n_dims)?;
+                    out_offset += 0.max(out_shape[axis_normalized] as isize - 1) * out_strides[axis_normalized];
+                    if out_shape[axis_normalized] != 0 {
+                        out_strides[axis_normalized] *= -1;
+                    }
+                }
+
+                Ok(ArrayBase {
+                    shape: out_shape,
+                    strides: out_strides,
+                    storage: self.storage.view(),
+                    offset: out_offset as usize,
+                    phantom: PhantomData
+                })
+            }
+
             #[inline]
             fn is_empty(&self) -> bool {
                 self.len() == 0
@@ -1326,6 +1356,46 @@ mod tests {
         a3.fill(7);
 
         assert!(a3.iter().all(|&x| x == 7));
+
+        Ok(())
+    }
+
+    #[test]
+    fn flip_along_axes() {
+        let a = (0..)
+            .take(24)
+            .collect::<Array<_, _>>()
+            .into_shape([2, 3, 4])
+            .unwrap();
+
+        macro_rules! check {
+            ($axis:expr) => {
+                let subject = a.flip_along_axes(&[$axis]).unwrap();
+
+                assert_eq!(subject.storage, a.storage.view());
+                assert_eq!(a.shape(), subject.shape());
+
+                let mut actual_strides = subject.strides().clone();
+                actual_strides[$axis as usize] *= -1;
+
+                assert_eq!(&actual_strides, a.strides());
+            };
+        }
+
+        check!(0);
+        check!(1);
+        check!(2);
+    }
+
+    #[test]
+    fn flip_twice() -> Result<()> {
+        let a = (0..)
+            .take(24)
+            .collect::<Array<_, _>>()
+            .into_shape([2, 3, 4])
+            .unwrap();
+
+        assert_eq!(a.flip()?.flip()?, a.view());
 
         Ok(())
     }
